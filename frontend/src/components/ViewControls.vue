@@ -340,6 +340,7 @@ import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ColumnSettings from '@/components/ColumnSettings.vue'
 import KanbanSettings from '@/components/Kanban/KanbanSettings.vue'
 import LostReasonModal from '@/components/Modals/LostReasonModal.vue'
+import { renderFieldLayoutDialog } from '@/utils/renderFieldLayoutDialog'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { viewsStore } from '@/stores/views'
@@ -1269,10 +1270,41 @@ function moveKanbanCard(data, fields) {
     .then(() => {
       persistKanbanColumnOrder(data.kanban_columns)
     })
-    .catch(() => {
-      toast.error(__('Could not move the card. Reverting.'))
+    .catch((err) => {
+      // The server's reason (e.g. a validation rule) says what to fix; fall back to the generic text.
+      let reason = err?.messages?.[0]?.replace(/<[^>]*>/g, '')
+      toast.error(reason || __('Could not move the card. Reverting.'))
       revertKanbanCardMove(data)
     })
+}
+
+// Apps can ask for input before a card moves (hook `crm_kanban_move_dialog`, see crm.api.kanban).
+// Returns false when the user cancels; the card is then put back.
+async function runKanbanMoveDialog(data) {
+  let spec = await call('crm.api.kanban.get_move_dialog', {
+    doctype: props.doctype,
+    name: data.item,
+    fieldname: view.value.column_field,
+    from_value: data.from,
+    to_value: data.to,
+  }).catch(() => null)
+  if (!spec) return true
+  let values = await renderFieldLayoutDialog({
+    title: spec.title,
+    fields: spec.fields,
+    defaults: spec.defaults,
+    required: spec.required,
+    submitLabel: spec.submitLabel,
+    cancelLabel: __('Cancel'),
+  })
+  if (!values) return false
+  try {
+    await call(spec.submit_method, { ...(spec.submit_args || {}), ...values })
+  } catch (err) {
+    toast.error(err?.messages?.[0]?.replace(/<[^>]*>/g, '') || __('Could not save the details'))
+    return false
+  }
+  return true
 }
 
 function confirmKanbanLostReason(payload) {
@@ -1289,8 +1321,13 @@ function cancelKanbanLostReason() {
   revertKanbanCardMove(data)
 }
 
-function updateKanbanSettings(data) {
+async function updateKanbanSettings(data) {
   if (data.item && data.to) {
+    if (data.from !== data.to && !(await runKanbanMoveDialog(data))) {
+      toast.info(__('Move cancelled'))
+      revertKanbanCardMove(data)
+      return
+    }
     if (
       view.value.column_field === 'status' &&
       getKanbanStatusType(data.to) === 'Lost'
