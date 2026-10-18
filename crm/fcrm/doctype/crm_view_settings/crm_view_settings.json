@@ -31,6 +31,7 @@
   "kanban_section",
   "column_field",
   "title_field",
+  "kanban_background",
   "kanban_columns",
   "kanban_fields"
  ],
@@ -174,6 +175,12 @@
    "label": "Title Field"
   },
   {
+   "fieldname": "kanban_background",
+   "fieldtype": "Data",
+   "label": "Kanban Background",
+   "description": "Board background: #hex colour, g:<preset> gradient, or an image URL."
+  },
+  {
    "default": "0",
    "fieldname": "is_standard",
    "fieldtype": "Check",
@@ -188,7 +195,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-23 12:29:29.007129",
+ "modified": "2026-10-18 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM View Settings",
