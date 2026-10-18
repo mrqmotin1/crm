@@ -185,6 +185,11 @@
           </div>
         </template>
       </FileUploader>
+      <LabelsSection
+        v-model="doc.labels"
+        doctype="CRM Lead"
+        :docname="leadId"
+      />
       <SLASection
         v-if="doc.sla_status"
         v-model="doc"
@@ -265,6 +270,7 @@ import Activities from '@/components/Activities/Activities.vue'
 import AssignTo from '@/components/AssignTo.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import LabelsSection from '@/components/Labels/LabelsSection.vue'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import ConvertToDealModal from '@/components/Modals/ConvertToDealModal.vue'

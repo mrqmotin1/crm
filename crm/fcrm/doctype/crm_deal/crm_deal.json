@@ -13,6 +13,7 @@
   "next_step",
   "column_break_ijan",
   "status",
+  "labels",
   "deal_owner",
   "section_break_jgpm",
   "probability",
@@ -155,6 +156,14 @@
    "options": "CRM Deal Status",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Small Text",
+   "label": "Labels",
+   "no_copy": 1,
+   "read_only": 1,
+   "description": "Managed by the labels picker: a JSON list of CRM Label names."
   },
   {
    "fieldname": "contacts",
@@ -475,7 +484,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-04 12:34:10.808282",
+ "modified": "2026-10-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Deal",

@@ -134,7 +134,20 @@
           />
         </div>
         <div
-          v-if="
+          v-if="fieldName === 'creation' && getRow(itemName, fieldName).age"
+          class="truncate text-base"
+        >
+          <Tooltip :text="__('Age: days since it was created')">
+            <Badge
+              variant="subtle"
+              :theme="getRow(itemName, fieldName).color"
+              size="md"
+              :label="getRow(itemName, fieldName).label"
+            />
+          </Tooltip>
+        </div>
+        <div
+          v-else-if="
             [
               'modified',
               'creation',
@@ -148,6 +161,9 @@
           <Tooltip :text="getRow(itemName, fieldName).label">
             <div>{{ getRow(itemName, fieldName).timeAgo }}</div>
           </Tooltip>
+        </div>
+        <div v-else-if="fieldName === 'labels'" class="w-full">
+          <LabelChips :names="getRow(itemName, fieldName).names" size="sm" />
         </div>
         <div
           v-else-if="
@@ -287,8 +303,10 @@ import { usersStore } from '@/stores/users'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
-import { formatDate, timeAgo, website, formatTime, dueBadge } from '@/utils'
+import { formatDate, timeAgo, website, formatTime, dueBadge, ageBadge } from '@/utils'
 import CardModal from '@/components/Modals/CardModal.vue'
+import LabelChips from '@/components/Labels/LabelChips.vue'
+import { parseLabels } from '@/stores/labels'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { useBroadcast } from '@/composables/useBroadcast'
@@ -454,6 +472,10 @@ function parseRows(rows, columns = []) {
       if (row == 'lead_temperature' && deal[row]) {
         _rows[row] = { label: deal[row], color: { Hot: 'red', Warm: 'orange', Cold: 'blue' }[deal[row]] || 'gray' }
       }
+      if (row == 'labels') {
+        const names = parseLabels(deal[row])
+        _rows[row] = { label: names.join(', '), names }
+      }
       if (row == 'source' && deal[row]) {
         _rows[row] = { label: deal[row], color: 'gray' }
       }
@@ -517,6 +539,10 @@ function parseRows(rows, columns = []) {
         }))
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = timestampCell(deal[row])
+        if (row == 'creation' && view_type === 'kanban') {
+          const type = getDealStatus(deal.status)?.type
+          _rows[row] = ageBadge(deal[row], ['Won', 'Lost'].includes(type))
+        }
       } else if (
         ['first_response_time', 'first_responded_on', 'response_by'].includes(
           row,

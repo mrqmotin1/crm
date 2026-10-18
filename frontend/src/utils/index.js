@@ -96,6 +96,17 @@ export function getFormat(
   return format
 }
 
+// Kanban badge for a record's age (days since `creation`, i.e. since the lead came in):
+// green up to 2 days, orange up to 7, red after; gray once the record is closed.
+export function ageBadge(created, closed = false) {
+  if (!created) return { label: '' }
+  const start = new Date(String(created).replace(' ', 'T'))
+  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000))
+  const label = days == 0 ? __('Today') : days == 1 ? __('1 day') : __('{0} days', [days])
+  const color = closed ? 'gray' : days <= 2 ? 'green' : days <= 7 ? 'orange' : 'red'
+  return { label, color, age: true, value: created }
+}
+
 // Kanban badge for a `*_due` datetime: red overdue, orange today, green later.
 export function dueBadge(value, label) {
   if (!value) return { label }
