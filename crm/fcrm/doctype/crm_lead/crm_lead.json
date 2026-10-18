@@ -34,6 +34,7 @@
   "phone",
   "column_break_dbsv",
   "status",
+  "labels",
   "no_of_employees",
   "annual_revenue",
   "image",
@@ -119,6 +120,14 @@
    "options": "CRM Lead Status",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Small Text",
+   "label": "Labels",
+   "no_copy": 1,
+   "read_only": 1,
+   "description": "Managed by the labels picker: a JSON list of CRM Label names."
   },
   {
    "fieldname": "email",
@@ -440,7 +449,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-10 05:00:00.000000",
+ "modified": "2026-10-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Lead",

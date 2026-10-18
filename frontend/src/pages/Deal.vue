@@ -128,6 +128,11 @@
           </div>
         </div>
       </div>
+      <LabelsSection
+        v-model="doc.labels"
+        doctype="CRM Deal"
+        :docname="dealId"
+      />
       <SLASection
         v-if="doc.sla_status"
         v-model="doc"
@@ -367,6 +372,7 @@ import ContactModal from '@/components/Modals/ContactModal.vue'
 import Link from '@/components/Controls/Link.vue'
 import Section from '@/components/CollapsibleSection.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import LabelsSection from '@/components/Labels/LabelsSection.vue'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import {
