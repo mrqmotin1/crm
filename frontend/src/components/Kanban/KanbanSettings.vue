@@ -93,6 +93,13 @@
             </div>
           </template>
         </Combobox>
+        <div class="mt-4">
+          <BoardBackgroundPicker
+            :doctype="doctype"
+            :view="currentBoard?.is_standard ? null : currentBoard?.name"
+            :modelValue="currentBoard?.kanban_background"
+          />
+        </div>
       </div>
     </template>
     <template #actions>
@@ -110,6 +117,9 @@ import DragVerticalIcon from '@/components/Icons/DragVerticalIcon.vue'
 import KanbanIcon from '@/components/Icons/KanbanIcon.vue'
 import { getMeta } from '@/stores/meta'
 import { Combobox, Dialog } from 'frappe-ui'
+import BoardBackgroundPicker from '@/components/Kanban/BoardBackgroundPicker.vue'
+import { viewsStore } from '@/stores/views'
+import { useRoute } from 'vue-router'
 import Draggable from 'vuedraggable'
 import { ref, computed, nextTick } from 'vue'
 
@@ -121,6 +131,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update'])
+
+const route = useRoute()
+const { getView } = viewsStore()
+const currentBoard = computed(() => getView(route.query.view, 'kanban', props.doctype))
 
 const list = defineModel({ type: Object })
 const showDialog = ref(false)

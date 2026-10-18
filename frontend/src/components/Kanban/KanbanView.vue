@@ -1,5 +1,8 @@
 <template>
-  <div class="flex overflow-x-auto h-full">
+  <div
+    class="flex overflow-x-auto h-full"
+    :style="boardBackgroundStyle(options.background)"
+  >
     <Draggable
       v-if="columns"
       :list="columns"
@@ -11,7 +14,7 @@
       <template #item="{ element: column }">
         <div
           v-if="!column.column.delete"
-          class="flex flex-col gap-2.5 min-w-72 w-72 hover:bg-surface-gray-2 rounded-lg p-2.5"
+          class="flex flex-col gap-2.5 min-w-72 w-72 bg-surface-gray-2 rounded-xl p-2.5 my-2 mx-1 self-start max-h-[calc(100%-1rem)]"
         >
           <div class="flex gap-2 items-center group justify-between">
             <div class="flex items-center text-base">
@@ -88,7 +91,7 @@
                         ? 'router-link'
                         : 'div'
                   "
-                  class="pt-3 px-3.5 pb-2.5 rounded-lg border bg-surface-base text-base flex flex-col text-ink-gray-9"
+                  class="group relative pt-2.5 px-3 pb-2 rounded-lg bg-surface-base text-base flex flex-col text-ink-gray-9 shadow-[0_1px_1px_#091e4240,0_0_1px_#091e424f] outline outline-2 outline-transparent hover:outline-blue-500 transition-[outline-color]"
                   :data-name="fields.name"
                   v-bind="
                     options.onCardClick
@@ -108,6 +111,14 @@
                         }
                   "
                 >
+                  <!-- Trello-style quick actions: visible on hover, kept while its menu has focus. -->
+                  <div
+                    v-if="$slots['hover-actions']"
+                    class="absolute right-1.5 top-1.5 z-10 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
+                    @click.stop.prevent
+                  >
+                    <slot name="hover-actions" v-bind="{ itemName: fields.name }" />
+                  </div>
                   <slot
                     name="title"
                     v-bind="{ fields, titleField, itemName: fields.name }"
@@ -200,6 +211,7 @@ import Draggable from 'vuedraggable'
 import { Combobox, Dropdown, Popover } from 'frappe-ui'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { boardBackgroundStyle } from '@/utils/boardBackground'
 
 const router = useRouter()
 

@@ -39,6 +39,7 @@
       }),
       onNewClick: (column) => onNewClick(column),
       onCardClick: (row) => openCard(row.name),
+      background: boardBackground,
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"
@@ -229,6 +230,17 @@
         </div>
       </div>
     </template>
+    <template #hover-actions="{ itemName }">
+      <Dropdown :options="quickActions(itemName)" placement="right">
+        <Button
+          size="sm"
+          variant="outline"
+          icon="edit-2"
+          class="!rounded-full bg-surface-base shadow-sm"
+          :aria-label="__('Quick actions')"
+        />
+      </Dropdown>
+    </template>
     <template #actions="{ itemName }">
       <div class="flex gap-2 items-center justify-between">
         <div class="text-ink-gray-5 flex items-center gap-1.5">
@@ -263,6 +275,13 @@
       </div>
     </template>
   </KanbanView>
+  <QuickLabelsDialog
+    v-if="quickLabels"
+    :key="quickLabels"
+    doctype="CRM Lead"
+    :name="quickLabels"
+    @close="onQuickLabelsClose"
+  />
   <CardModal
     v-if="route.params.viewType == 'kanban' && route.query.card"
     :key="route.query.card"
@@ -331,6 +350,8 @@ import { callEnabled } from '@/composables/telephony'
 import { useBroadcast } from '@/composables/useBroadcast'
 import { formatDate, timeAgo, website, formatTime, dueBadge, ageBadge } from '@/utils'
 import CardModal from '@/components/Modals/CardModal.vue'
+import QuickLabelsDialog from '@/components/Labels/QuickLabelsDialog.vue'
+import { viewsStore } from '@/stores/views'
 import LabelChips from '@/components/Labels/LabelChips.vue'
 import { parseLabels } from '@/stores/labels'
 import { timestampCell } from '@/composables/useTimelinePreferences'
@@ -367,6 +388,34 @@ const leads = ref({})
 // Kanban cards open in place (CardModal) via ?card=; Back or close removes it.
 function openCard(name) {
   router.push({ query: { ...route.query, card: name } })
+}
+
+// Trello-style board: background from the kanban view, quick actions on card hover.
+const { getView: getBoardView } = viewsStore()
+const boardBackground = computed(
+  () => getBoardView(route.query.view, 'kanban', 'CRM Lead')?.kanban_background || null,
+)
+const quickLabels = ref(null)
+
+function quickActions(name) {
+  return [
+    { label: __('Open card'), icon: 'maximize-2', onClick: () => openCard(name) },
+    { label: __('Edit labels'), icon: 'tag', onClick: () => (quickLabels.value = name) },
+    {
+      label: __('Open in new tab'),
+      icon: 'external-link',
+      onClick: () =>
+        window.open(
+          router.resolve({ name: 'Lead', params: { leadId: name } }).href,
+          '_blank',
+        ),
+    },
+  ]
+}
+
+function onQuickLabelsClose() {
+  quickLabels.value = null
+  leads.value?.reload?.()
 }
 
 function closeCard() {
