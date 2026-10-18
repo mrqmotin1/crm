@@ -96,6 +96,17 @@ export function getFormat(
   return format
 }
 
+// Kanban badge for a `*_due` datetime: red overdue, orange today, green later.
+export function dueBadge(value, label) {
+  if (!value) return { label }
+  const due = new Date(String(value).replace(' ', 'T'))
+  const now = new Date()
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  if (due < now) return { label: `${__('Overdue')} · ${label}`, color: 'red', value }
+  if (due < endOfToday) return { label: `${__('Today')} · ${label}`, color: 'orange', value }
+  return { label, color: 'green', value }
+}
+
 export function timeAgo(date) {
   return prettyDate(date)
 }

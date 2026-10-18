@@ -37,6 +37,7 @@
         query: { view: route.query.view, viewType: route.params.viewType },
       }),
       onNewClick: (column) => onNewClick(column),
+      onCardClick: (row) => openCard(row.name),
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
     @loadMore="(columnName) => viewControls.loadMoreKanban(columnName)"
@@ -148,6 +149,20 @@
             <div>{{ getRow(itemName, fieldName).timeAgo }}</div>
           </Tooltip>
         </div>
+        <div
+          v-else-if="
+            fieldName.endsWith('_due') ||
+            ['lead_temperature', 'source'].includes(fieldName)
+          "
+          class="truncate text-base"
+        >
+          <Badge
+            variant="subtle"
+            :theme="getRow(itemName, fieldName).color || 'gray'"
+            size="md"
+            :label="getRow(itemName, fieldName).label"
+          />
+        </div>
         <div v-else-if="fieldName === 'sla_status'" class="truncate text-base">
           <Badge
             v-if="getRow(itemName, fieldName).value"
@@ -206,6 +221,13 @@
       </div>
     </template>
   </KanbanView>
+  <CardModal
+    v-if="route.params.viewType == 'kanban' && route.query.card"
+    :key="route.query.card"
+    doctype="CRM Deal"
+    :name="route.query.card"
+    @close="closeCard"
+  />
   <DealsListView
     v-else-if="deals.data && rows.length"
     ref="dealsListView"
@@ -265,13 +287,14 @@ import { usersStore } from '@/stores/users'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
-import { formatDate, timeAgo, website, formatTime } from '@/utils'
+import { formatDate, timeAgo, website, formatTime, dueBadge } from '@/utils'
+import CardModal from '@/components/Modals/CardModal.vue'
 import { timestampCell } from '@/composables/useTimelinePreferences'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { useBroadcast } from '@/composables/useBroadcast'
 import { Tooltip, Avatar, Dropdown } from 'frappe-ui'
-import { useRoute } from 'vue-router'
-import { ref, reactive, computed, h } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ref, reactive, computed, h, watch } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Deal')
@@ -285,6 +308,7 @@ const { showModal } = useDoctypeModal()
 const { on } = useBroadcast()
 
 const route = useRoute()
+const router = useRouter()
 
 const dealsListView = ref(null)
 const showDealModal = ref(false)
@@ -297,6 +321,24 @@ const defaults = reactive({})
 
 // deals data is loaded in the ViewControls component
 const deals = ref({})
+
+// Kanban cards open in place (CardModal) via ?card=; Back or close removes it.
+function openCard(name) {
+  router.push({ query: { ...route.query, card: name } })
+}
+
+function closeCard() {
+  if (!route.query.card) return
+  const { card, ...query } = route.query
+  router.replace({ query, hash: '' })
+}
+
+watch(
+  () => route.query.card,
+  (card, previous) => {
+    if (previous && !card) deals.value?.reload?.()
+  },
+)
 const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
@@ -406,6 +448,14 @@ function parseRows(rows, columns = []) {
         !['modified', 'creation'].includes(row)
       ) {
         _rows[row] = formatDate(deal[row], '', true, fieldType == 'Datetime')
+        if (row.endsWith('_due')) _rows[row] = dueBadge(deal[row], _rows[row])
+      }
+
+      if (row == 'lead_temperature' && deal[row]) {
+        _rows[row] = { label: deal[row], color: { Hot: 'red', Warm: 'orange', Cold: 'blue' }[deal[row]] || 'gray' }
+      }
+      if (row == 'source' && deal[row]) {
+        _rows[row] = { label: deal[row], color: 'gray' }
       }
 
       if (fieldType && fieldType == 'Currency') {

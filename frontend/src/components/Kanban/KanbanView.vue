@@ -81,15 +81,32 @@
             >
               <template #item="{ element: fields }">
                 <component
-                  :is="options.getRoute ? 'router-link' : 'div'"
+                  :is="
+                    options.onCardClick
+                      ? 'a'
+                      : options.getRoute
+                        ? 'router-link'
+                        : 'div'
+                  "
                   class="pt-3 px-3.5 pb-2.5 rounded-lg border bg-surface-base text-base flex flex-col text-ink-gray-9"
                   :data-name="fields.name"
-                  v-bind="{
-                    to: options.getRoute ? options.getRoute(fields) : undefined,
-                    onClick: options.onClick
-                      ? () => options.onClick(fields)
-                      : undefined,
-                  }"
+                  v-bind="
+                    options.onCardClick
+                      ? {
+                          href: options.getRoute
+                            ? router.resolve(options.getRoute(fields)).href
+                            : undefined,
+                          onClick: (e) => onCardClick(e, fields),
+                        }
+                      : {
+                          to: options.getRoute
+                            ? options.getRoute(fields)
+                            : undefined,
+                          onClick: options.onClick
+                            ? () => options.onClick(fields)
+                            : undefined,
+                        }
+                  "
                 >
                   <slot
                     name="title"
@@ -182,8 +199,19 @@ import { isTouchScreenDevice, colors, parseColor } from '@/utils'
 import Draggable from 'vuedraggable'
 import { Combobox, Dropdown, Popover } from 'frappe-ui'
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 
-defineProps({
+const router = useRouter()
+
+// Plain click opens the card in place (options.onCardClick); Cmd/Ctrl/Shift/middle
+// click falls through to the href and opens the full page, as a link would.
+function onCardClick(e, fields) {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return
+  e.preventDefault()
+  props.options.onCardClick(fields)
+}
+
+const props = defineProps({
   options: {
     type: Object,
     default: () => ({
