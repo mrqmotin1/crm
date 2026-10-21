@@ -126,7 +126,7 @@
     <template #fields="{ fieldName, itemName }">
       <div
         v-if="getRow(itemName, fieldName).label"
-        class="truncate flex items-center gap-2"
+        class="truncate flex items-center gap-1.5"
       >
         <div v-if="fieldName === 'status'">
           <IndicatorIcon :class="getRow(itemName, fieldName).color" />
@@ -169,7 +169,7 @@
             <Badge
               variant="subtle"
               :theme="getRow(itemName, fieldName).color"
-              size="md"
+              size="sm"
               :label="getRow(itemName, fieldName).label"
             />
           </Tooltip>
@@ -203,7 +203,7 @@
           <Badge
             variant="subtle"
             :theme="getRow(itemName, fieldName).color || 'gray'"
-            size="md"
+            size="sm"
             :label="getRow(itemName, fieldName).label"
           />
         </div>
@@ -212,7 +212,7 @@
             v-if="getRow(itemName, fieldName).value"
             :variant="'subtle'"
             :theme="getRow(itemName, fieldName).color"
-            size="md"
+            size="sm"
             :label="getRow(itemName, fieldName).value"
           />
         </div>
@@ -243,25 +243,30 @@
     </template>
     <template #actions="{ itemName }">
       <div class="flex gap-2 items-center justify-between">
-        <div class="text-ink-gray-5 flex items-center gap-1.5">
-          <EmailAtIcon class="h-4 w-4" />
-          <span v-if="getRow(itemName, '_email_count').label">
-            {{ getRow(itemName, '_email_count').label }}
+        <div class="flex min-h-5 items-center gap-2.5 text-xs text-ink-gray-5">
+          <span
+            v-if="getRow(itemName, '_email_count').label"
+            class="inline-flex items-center gap-1"
+          >
+            <EmailAtIcon class="size-3.5" />{{ getRow(itemName, '_email_count').label }}
           </span>
-          <span class="text-4xl leading-[0]"> &middot; </span>
-          <NoteIcon class="h-4 w-4" />
-          <span v-if="getRow(itemName, '_note_count').label">
-            {{ getRow(itemName, '_note_count').label }}
+          <span
+            v-if="getRow(itemName, '_note_count').label"
+            class="inline-flex items-center gap-1"
+          >
+            <NoteIcon class="size-3.5" />{{ getRow(itemName, '_note_count').label }}
           </span>
-          <span class="text-4xl leading-[0]"> &middot; </span>
-          <TaskIcon class="h-4 w-4" />
-          <span v-if="getRow(itemName, '_task_count').label">
-            {{ getRow(itemName, '_task_count').label }}
+          <span
+            v-if="getRow(itemName, '_task_count').label"
+            class="inline-flex items-center gap-1"
+          >
+            <TaskIcon class="size-3.5" />{{ getRow(itemName, '_task_count').label }}
           </span>
-          <span class="text-4xl leading-[0]"> &middot; </span>
-          <CommentIcon class="h-4 w-4" />
-          <span v-if="getRow(itemName, '_comment_count').label">
-            {{ getRow(itemName, '_comment_count').label }}
+          <span
+            v-if="getRow(itemName, '_comment_count').label"
+            class="inline-flex items-center gap-1"
+          >
+            <CommentIcon class="size-3.5" />{{ getRow(itemName, '_comment_count').label }}
           </span>
         </div>
         <Dropdown
@@ -270,7 +275,7 @@
           variant="ghost"
           @click.stop.prevent
         >
-          <Button icon="lucide-plus" variant="ghost" />
+          <Button icon="lucide-plus" variant="ghost" size="sm" />
         </Dropdown>
       </div>
     </template>
