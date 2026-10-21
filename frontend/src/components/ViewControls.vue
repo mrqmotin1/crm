@@ -315,6 +315,8 @@
     v-if="showKanbanLostReasonModal"
     v-model="showKanbanLostReasonModal"
     :doctype="props.doctype"
+    :status="pendingKanbanMove?.to || ''"
+    :name="pendingKanbanMove?.item || ''"
     @save="confirmKanbanLostReason"
     @cancel="cancelKanbanLostReason"
   />
