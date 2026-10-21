@@ -1253,6 +1253,28 @@ function moveKanbanCard(data, fields) {
 
 // Apps can ask for input before a card moves (hook `crm_kanban_move_dialog`, see crm.api.kanban).
 // Returns false when the user cancels; the card is then put back.
+// A server-defined dialog can't carry JS, so a Button field may name a whitelisted `click_method` instead: on click it is
+// called with the field's `click_args` and the dialog's current values, and the object it returns fills the dialog.
+function withClickMethod(field, spec) {
+  if (field.fieldtype !== 'Button' || !field.click_method) return field
+  return {
+    ...field,
+    click: async (values) => {
+      try {
+        let result = await call(field.click_method, {
+          ...(field.click_args || {}),
+          values: JSON.stringify(values),
+        })
+        if (result && typeof result === 'object') Object.assign(values, result)
+      } catch (err) {
+        toast.error(
+          err?.messages?.[0]?.replace(/<[^>]*>/g, '') || __('Could not fill the form'),
+        )
+      }
+    },
+  }
+}
+
 async function runKanbanMoveDialog(data) {
   let spec = await call('crm.api.kanban.get_move_dialog', {
     doctype: props.doctype,
@@ -1264,7 +1286,7 @@ async function runKanbanMoveDialog(data) {
   if (!spec) return true
   let values = await renderFieldLayoutDialog({
     title: spec.title,
-    fields: spec.fields,
+    fields: (spec.fields || []).map((field) => withClickMethod(field, spec)),
     defaults: spec.defaults,
     required: spec.required,
     submitLabel: spec.submitLabel,
