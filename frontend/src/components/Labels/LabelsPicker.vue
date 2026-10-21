@@ -1,5 +1,5 @@
 <template>
-  <div class="w-72 rounded-lg bg-surface-modal p-3 shadow-2xl ring-1 ring-black ring-opacity-5">
+  <div class="w-72 rounded-lg bg-surface-elevation-2 p-3 shadow-2xl ring-1 ring-black ring-opacity-5">
     <div class="relative mb-3 flex items-center justify-center">
       <Button
         v-if="editing"

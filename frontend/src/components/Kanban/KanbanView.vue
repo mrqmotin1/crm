@@ -14,9 +14,9 @@
       <template #item="{ element: column }">
         <div
           v-if="!column.column.delete"
-          class="flex flex-col gap-2.5 min-w-72 w-72 bg-surface-gray-2 rounded-xl p-2.5 my-2 mx-1 self-start max-h-[calc(100%-1rem)]"
+          class="flex flex-col gap-1.5 min-w-64 w-64 bg-surface-gray-2 rounded-xl p-1.5 my-2 mx-1 self-start max-h-[calc(100%-1rem)]"
         >
-          <div class="flex gap-2 items-center group justify-between">
+          <div class="flex gap-2 items-center group justify-between px-1">
             <div class="flex items-center text-base">
               <Popover>
                 <template #target="{ togglePopover }">
@@ -77,7 +77,7 @@
               :list="column.data"
               group="fields"
               item-key="name"
-              class="flex flex-col gap-3.5 flex-1"
+              class="flex flex-col gap-1.5 flex-1"
               :delay="isTouchScreenDevice() ? 200 : 0"
               :data-column="column.column.name"
               @end="updateColumn"
@@ -91,7 +91,7 @@
                         ? 'router-link'
                         : 'div'
                   "
-                  class="group relative pt-2.5 px-3 pb-2 rounded-lg bg-surface-base text-base flex flex-col text-ink-gray-9 shadow-[0_1px_1px_#091e4240,0_0_1px_#091e424f] outline outline-2 outline-transparent hover:outline-blue-500 transition-[outline-color]"
+                  class="group relative px-2.5 py-2 rounded-lg bg-surface-base text-base flex flex-col text-ink-gray-9 shadow-[0_1px_1px_#091e4240,0_0_1px_#091e424f] outline outline-2 outline-transparent hover:outline-blue-500 transition-[outline-color]"
                   :data-name="fields.name"
                   v-bind="
                     options.onCardClick
@@ -132,10 +132,15 @@
                       </div>
                     </div>
                   </slot>
-                  <div class="border-b h-px my-2.5" />
-
-                  <div class="flex flex-col gap-3.5">
-                    <template v-for="value in column.fields" :key="value">
+                  <div
+                    class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-ink-gray-7 empty:hidden"
+                  >
+                    <div
+                      v-for="value in column.fields"
+                      :key="value"
+                      class="min-w-0 empty:hidden"
+                      :class="isChipField(value) ? 'max-w-full' : 'basis-full'"
+                    >
                       <slot
                         name="fields"
                         v-bind="{
@@ -148,9 +153,9 @@
                           {{ fields[value] }}
                         </div>
                       </slot>
-                    </template>
+                    </div>
                   </div>
-                  <div class="border-b h-px mt-2.5 mb-2" />
+                  <div class="mt-1.5" />
                   <slot name="actions" v-bind="{ itemName: fields.name }">
                     <div class="flex gap-2 items-center justify-between">
                       <div></div>
@@ -204,6 +209,12 @@
   </div>
 </template>
 <script setup>
+// Short values (badges, owner, dates) sit side by side on a compact card; the rest take a full row.
+const CHIP_FIELDS = ['creation', 'modified', 'status', 'source', 'lead_temperature', 'sla_status', 'lead_owner', 'deal_owner', '_assign', 'probability']
+function isChipField(name) {
+  return CHIP_FIELDS.includes(name) || name.endsWith('_due')
+}
+
 import RefreshIcon from '@/components/Icons/RefreshIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import { isTouchScreenDevice, colors, parseColor } from '@/utils'
