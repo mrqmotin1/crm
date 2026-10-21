@@ -58,6 +58,18 @@ app.use(telemetryPlugin, { app_name: 'crm' })
 
 app.config.globalProperties.$dialog = createDialog
 
+// Apps can add a script to every CRM page: `crm_include_js = ["/assets/<app>/js/x.js"]` in their hooks (boot lists
+// them). Loaded after the app mounts; `window.crmApi.router` lets such a script follow and change the current page.
+function loadIncludeScripts() {
+  window.crmApi = { router }
+  for (let src of window.crm_include_js || []) {
+    let script = document.createElement('script')
+    script.src = src
+    script.defer = true
+    document.body.appendChild(script)
+  }
+}
+
 let socket
 if (import.meta.env.DEV) {
   frappeRequest({ url: '/api/method/crm.www.crm.get_context_for_dev' }).then(
@@ -68,12 +80,14 @@ if (import.meta.env.DEV) {
       socket = initSocket()
       app.config.globalProperties.$socket = socket
       app.mount('#app')
+      loadIncludeScripts()
     },
   )
 } else {
   socket = initSocket()
   app.config.globalProperties.$socket = socket
   app.mount('#app')
+  loadIncludeScripts()
 }
 
 if (import.meta.env.DEV) {

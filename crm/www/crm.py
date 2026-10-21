@@ -88,6 +88,8 @@ def get_boot():
 				or get_system_timezone(),
 			},
 			"state_options": get_state_options(),
+			# scripts other apps add to every CRM page (hook `crm_include_js`); only this site's own assets
+			"crm_include_js": [p for p in frappe.get_hooks("crm_include_js") if isinstance(p, str) and p.startswith("/assets/")],
 		}
 	)
 
