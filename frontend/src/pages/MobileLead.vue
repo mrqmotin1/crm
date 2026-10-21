@@ -162,6 +162,7 @@ import { useDocument } from '@/data/document'
 import { isMobileView } from '@/composables/settings'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
+import { withExtensionTabs } from '@/data/extensions'
 import { useVisitedRecords } from '@/composables/useVisitedRecords'
 import {
   createResource,
@@ -348,7 +349,10 @@ const tabs = computed(() => {
       condition: () => whatsappEnabled.value,
     },
   ]
-  return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+  return withExtensionTabs(
+    'CRM Lead',
+    tabOptions.filter((tab) => (tab.condition ? tab.condition() : true)),
+  )
 })
 
 const { tabIndex } = useActiveTabManager(tabs, 'lastLeadTab')

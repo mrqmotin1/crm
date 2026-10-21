@@ -1,4 +1,5 @@
 import './index.css'
+import { registerTab } from '@/data/extensions'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -61,7 +62,7 @@ app.config.globalProperties.$dialog = createDialog
 // Apps can add a script to every CRM page: `crm_include_js = ["/assets/<app>/js/x.js"]` in their hooks (boot lists
 // them). Loaded after the app mounts; `window.crmApi.router` lets such a script follow and change the current page.
 function loadIncludeScripts() {
-  window.crmApi = { router }
+  window.crmApi = { router, registerTab }
   for (let src of window.crm_include_js || []) {
     let script = document.createElement('script')
     script.src = src
