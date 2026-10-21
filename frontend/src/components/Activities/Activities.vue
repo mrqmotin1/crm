@@ -11,7 +11,15 @@
     :modalRef="modalRef"
   />
   <FadedScrollableDiv class="flex flex-col h-full overflow-y-auto">
-    <QuotationsList v-if="title == 'Quotations'" :deal="docname" />
+    <ExtensionTab
+      v-if="extensionTab"
+      :key="extensionTab.name + docname"
+      :tab="extensionTab"
+      :doctype="doctype"
+      :docname="docname"
+      @reload="all_activities.reload()"
+    />
+    <QuotationsList v-else-if="title == 'Quotations'" :deal="docname" />
     <div
       v-else-if="all_activities?.loading"
       class="flex flex-1 flex-col items-center justify-center gap-3 text-2xl-medium text-ink-gray-4"
@@ -448,6 +456,7 @@ import CallArea from '@/components/Activities/CallArea.vue'
 import NoteArea from '@/components/Activities/NoteArea.vue'
 import TaskArea from '@/components/Activities/TaskArea.vue'
 import AttachmentArea from '@/components/Activities/AttachmentArea.vue'
+import ExtensionTab from '@/components/Activities/ExtensionTab.vue'
 import QuotationsList from '@/components/Activities/QuotationsList.vue'
 import DataFields from '@/components/Activities/DataFields.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
@@ -528,6 +537,7 @@ const fieldLayoutTabIndex = ref(0)
 const fieldLayoutTabName = ref('')
 
 const title = computed(() => props.tabs?.[tabIndex.value]?.name || 'Activity')
+const extensionTab = computed(() => props.tabs?.[tabIndex.value]?.extension)
 
 const changeTabTo = (tabName) => {
   const tabNames = props.tabs?.map((tab) => tab.name?.toLowerCase())

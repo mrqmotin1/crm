@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="title !== 'Data'"
+    v-if="title !== 'Data' && !tabs?.find((t) => t.name == title)?.extension"
     class="flex items-center justify-between text-lg-medium sm:mx-10 sm:mb-4 sm:mt-8"
   >
     <div class="flex h-8 items-center text-2xl-semibold text-ink-gray-8">

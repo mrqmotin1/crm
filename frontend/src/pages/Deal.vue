@@ -417,6 +417,7 @@ import {
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
+import { withExtensionTabs } from '@/data/extensions'
 import { useUnsavedChangesWarning } from '@/composables/useUnsavedChangesWarning'
 import { useVisitedRecords } from '@/composables/useVisitedRecords'
 
@@ -803,7 +804,10 @@ const tabs = computed(() => {
       condition: () => canViewQuotations.value,
     },
   ]
-  return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+  return withExtensionTabs(
+    'CRM Deal',
+    tabOptions.filter((tab) => (tab.condition ? tab.condition() : true)),
+  )
 })
 
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastDealTab')

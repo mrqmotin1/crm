@@ -306,6 +306,7 @@ import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
 import { canViewQuotations } from '@/composables/erpnext'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
+import { withExtensionTabs } from '@/data/extensions'
 import { useVisitedRecords } from '@/composables/useVisitedRecords'
 import {
   createResource,
@@ -497,7 +498,10 @@ const tabs = computed(() => {
       condition: () => canViewQuotations.value,
     },
   ]
-  return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+  return withExtensionTabs(
+    'CRM Deal',
+    tabOptions.filter((tab) => (tab.condition ? tab.condition() : true)),
+  )
 })
 const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab')
 
