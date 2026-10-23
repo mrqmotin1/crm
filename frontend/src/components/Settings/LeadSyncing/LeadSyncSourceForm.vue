@@ -108,6 +108,31 @@
               :label="__('Last Synced At')"
             />
 
+            <div
+              v-if="fieldsMap.merge_duplicates"
+              class="col-span-2 flex flex-col gap-1"
+            >
+              <div class="flex items-center gap-2">
+                <Switch v-model="syncSource.merge_duplicates" size="sm" />
+                <span class="text-sm text-ink-gray-8">{{
+                  __(fieldsMap.merge_duplicates.label)
+                }}</span>
+              </div>
+              <p class="text-xs text-ink-gray-5">
+                {{ __(fieldsMap.merge_duplicates.description) }}
+              </p>
+            </div>
+
+            <FormControl
+              v-if="
+                fieldsMap.returning_after_days && syncSource.merge_duplicates
+              "
+              v-model="syncSource.returning_after_days"
+              type="number"
+              :label="__(fieldsMap.returning_after_days.label)"
+              :description="__(fieldsMap.returning_after_days.description)"
+            />
+
             <Link
               v-if="!isLocal"
               v-model="syncSource.facebook_page"
@@ -247,6 +272,8 @@ const syncSource = ref({
   facebook_page: '',
   facebook_lead_form: '',
   enabled: true,
+  merge_duplicates: false,
+  returning_after_days: 7,
   background_sync_frequency:
     fieldsMap.value.background_sync_frequency?.default || 'Hourly',
 })
