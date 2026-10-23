@@ -15,7 +15,11 @@
   "facebook_section",
   "facebook_page",
   "column_break_zukm",
-  "facebook_lead_form"
+  "facebook_lead_form",
+  "merge_section",
+  "merge_duplicates",
+  "column_break_merge",
+  "returning_after_days"
  ],
  "fields": [
   {
@@ -80,6 +84,30 @@
    "label": "Background Sync Frequency",
    "options": "Every 5 Minutes\nEvery 10 Minutes\nEvery 15 Minutes\nHourly\nDaily\nMonthly",
    "reqd": 1
+  },
+  {
+   "fieldname": "merge_section",
+   "fieldtype": "Section Break",
+   "label": "Duplicates"
+  },
+  {
+   "default": "0",
+   "fieldname": "merge_duplicates",
+   "fieldtype": "Check",
+   "label": "Merge into existing lead when the phone number matches",
+   "description": "A submission whose phone number belongs to an open lead updates that lead (blank fields, a note with the answers, returning leads reopened) instead of failing as a duplicate."
+  },
+  {
+   "fieldname": "column_break_merge",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "7",
+   "depends_on": "merge_duplicates",
+   "fieldname": "returning_after_days",
+   "fieldtype": "Int",
+   "label": "Treat as returning after (days)",
+   "description": "An active lead older than this keeps its status and its owner gets a 'Came back' task. A Lost or On Hold lead always comes back to the first Open status."
   }
  ],
  "grid_page_length": 50,
@@ -90,7 +118,7 @@
    "link_fieldname": "source"
   }
  ],
- "modified": "2026-02-23 12:45:55.637376",
+ "modified": "2026-10-23 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Lead Syncing",
  "name": "Lead Sync Source",
