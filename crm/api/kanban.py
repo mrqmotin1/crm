@@ -10,6 +10,10 @@ def get_move_dialog(doctype: str, name: str, fieldname: str, from_value: str | N
 	a form dialog spec (title, fields, defaults, required, submitLabel) plus `submit_method` and
 	`submit_args`: the board calls submit_method with submit_args and the dialog's values, then saves
 	the move. None (no app objects) keeps the board's plain behaviour.
+
+	A field of type Button may carry `click_method` (a whitelisted dotted path) and `click_args`: clicking it calls the
+	method with click_args plus `values` (the dialog's current values, JSON), and the dict it returns is merged into the
+	dialog (e.g. an assistant that drafts the note).
 	"""
 	frappe.has_permission(doctype, "write", name, throw=True)
 	for path in frappe.get_hooks("crm_kanban_move_dialog"):
