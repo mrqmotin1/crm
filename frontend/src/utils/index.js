@@ -102,9 +102,17 @@ export function ageBadge(created, closed = false) {
   if (!created) return { label: '' }
   const start = new Date(String(created).replace(' ', 'T'))
   const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86400000))
-  const label = days == 0 ? __('Today') : days == 1 ? __('1 day') : __('{0} days', [days])
+  const label = days == 0 ? `${__('Today')} · ${sinceLabel(start)}` : days == 1 ? __('1 day') : __('{0} days', [days])
   const color = closed ? 'gray' : days <= 2 ? 'green' : days <= 7 ? 'orange' : 'red'
   return { label, color, age: true, value: created }
+}
+
+// "just now", "4 min ago", "3 h ago": how long ago, for things created today.
+function sinceLabel(start) {
+  const minutes = Math.max(0, Math.floor((Date.now() - start.getTime()) / 60000))
+  if (minutes < 1) return __('just now')
+  if (minutes < 60) return __('{0} min ago', [minutes])
+  return __('{0} h ago', [Math.floor(minutes / 60)])
 }
 
 // Kanban badge for a `*_due` datetime: red overdue, orange today, green later.

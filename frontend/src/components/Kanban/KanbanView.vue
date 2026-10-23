@@ -53,7 +53,12 @@
                   </div>
                 </template>
               </Popover>
-              <div class="text-ink-gray-9">{{ column.column.name }}</div>
+              <div class="text-ink-gray-9">
+                {{ column.column.name }}
+                <span class="text-ink-gray-5"
+                  >({{ column.column.all_count ?? column.column.count ?? 0 }})</span
+                >
+              </div>
             </div>
             <div class="flex">
               <Dropdown :options="actions(column)">
