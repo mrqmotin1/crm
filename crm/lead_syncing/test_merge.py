@@ -2,7 +2,10 @@ import random
 from datetime import timedelta
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+try:  # v16: test records load lazily
+	from frappe.tests import IntegrationTestCase as TestCase
+except ImportError:  # v15
+	from frappe.tests.utils import FrappeTestCase as TestCase
 from frappe.utils import add_days, now_datetime
 
 from crm.lead_syncing import merge
@@ -27,7 +30,7 @@ def submission(meta_id: str, phone: str, created=None, **answers) -> dict:
 	return {"id": meta_id, "created_time": utc.strftime("%Y-%m-%dT%H:%M:%S+0000"), "field_data": fields}
 
 
-class TestLeadSyncMerge(FrappeTestCase):
+class TestLeadSyncMerge(TestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
