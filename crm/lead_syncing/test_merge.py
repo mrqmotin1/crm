@@ -1,12 +1,13 @@
 import random
-from datetime import timedelta
+from datetime import timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import frappe
 try:  # v16: test records load lazily
 	from frappe.tests import IntegrationTestCase as TestCase
 except ImportError:  # v15
 	from frappe.tests.utils import FrappeTestCase as TestCase
-from frappe.utils import add_days, now_datetime
+from frappe.utils import add_days, get_system_timezone, now_datetime
 
 from crm.lead_syncing import merge
 
@@ -22,8 +23,8 @@ def status_of(kind: str) -> str:
 
 
 def submission(meta_id: str, phone: str, created=None, **answers) -> dict:
-	created = created or now_datetime()
-	utc = created - timedelta(hours=6)  # tests run with the site's zone; only the order of events matters
+	created = created or now_datetime()  # site time zone, like lead dates
+	utc = created.replace(tzinfo=ZoneInfo(get_system_timezone())).astimezone(timezone.utc)
 	fields = [{"name": "full_name", "values": ["Meta Person"]}, {"name": "phone_number", "values": [phone]}]
 	fields += [{"name": k, "values": [v]} for k, v in answers.items()]
 	fields.append({"name": "email", "values": ["meta.person@example.com"]})

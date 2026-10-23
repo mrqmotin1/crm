@@ -16,7 +16,7 @@ Sites can supply their own phone lookup (hook `crm_lead_sync_find_lead`) and rea
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import frappe
 from frappe import _
@@ -38,6 +38,8 @@ PROTECTED = {
 DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 NOTE_TITLE = "Meta form submission {0}"
 LOCK_SECONDS = 120
+# Meta gives whole seconds and its clock is not ours: a status change within a minute of the submission is not "later"
+CLOCK_GRACE_SECONDS = 60
 
 
 # ---------------------------------------------------------------- phone numbers
@@ -150,6 +152,7 @@ def first_open_status() -> str | None:
 def status_changed_after(lead, when) -> bool:
 	"""Whether the lead's status changed after `when` (server clock, like the status change log). If it didn't, the
 	status the person saw when submitting is the lead's current status (old log rows may carry renamed statuses)."""
+	when = when + timedelta(seconds=CLOCK_GRACE_SECONDS)
 	return any(r.to_date and get_datetime(r.to_date) > when for r in lead.get("status_change_log") or [])
 
 
