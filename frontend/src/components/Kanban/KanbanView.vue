@@ -315,7 +315,8 @@ function updateColumn(d, fetchNewColumns = false) {
 
   let _columns = []
   columns.value.forEach((col) => {
-    col.column['order'] = col.data.map((d) => d.name)
+    // cards follow the view's sort; no manual order is stored
+    delete col.column['order']
     if (col.column.page_length) {
       delete col.column.page_length
     }

@@ -889,14 +889,36 @@ const quickFilterOptions = computed(() => {
   return options
 })
 
+// "Created": today, this week, last 30 days... on the record's creation date, for every list and kanban
+const createdQuickFilter = {
+  label: __('Created'),
+  fieldname: 'creation',
+  fieldtype: 'Timespan',
+  options: [
+    { label: __('Created: any time'), value: '' },
+    { label: __('Today'), value: 'today' },
+    { label: __('Yesterday'), value: 'yesterday' },
+    { label: __('This week'), value: 'this week' },
+    { label: __('Last 7 days'), value: 'last 7 days' },
+    { label: __('This month'), value: 'this month' },
+    { label: __('Last 30 days'), value: 'last 30 days' },
+    { label: __('Last month'), value: 'last month' },
+  ],
+}
+
 const quickFilterList = computed(() => {
-  let filters = quickFilters.data || []
+  let filters = [...(quickFilters.data || []), createdQuickFilter]
   let params = getListParams()
 
   filters.forEach((filter) => {
     filter['value'] = filter.fieldtype == 'Check' ? false : ''
     if (params?.filters?.[filter.fieldname]) {
       let value = params.filters[filter.fieldname]
+      if (filter.fieldtype === 'Timespan') {
+        filter['value'] =
+          Array.isArray(value) && value[0] === 'timespan' ? value[1] : ''
+        return
+      }
       if (Array.isArray(value)) {
         if (
           (['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(
@@ -1094,7 +1116,10 @@ function setupNewQuickFilters(filters) {
 function applyQuickFilter(filter, value) {
   let filters = { ...getListParams().filters }
   let field = filter.fieldname
-  if (value) {
+  if (value && filter.fieldtype === 'Timespan') {
+    filters[field] = ['timespan', value]
+    filter['value'] = value
+  } else if (value) {
     if (
       ['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(filter.fieldtype)
     ) {
