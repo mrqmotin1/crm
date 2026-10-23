@@ -16,6 +16,7 @@ Sites can supply their own phone lookup (hook `crm_lead_sync_find_lead`) and rea
 """
 
 import re
+from datetime import datetime
 
 import frappe
 from frappe import _
@@ -92,16 +93,30 @@ def answers(submission: dict) -> dict:
 	return {f["name"]: f["values"][0] for f in submission.get("field_data") or [] if f.get("values")}
 
 
-def submitted_at(submission: dict):
-	"""Meta's created_time (UTC) in the site's time zone; now if missing."""
+def _utc(submission: dict):
+	"""Meta's created_time as an aware UTC datetime, or None."""
 	value = submission.get("created_time")
 	if not value:
-		return now_datetime()
+		return None
 	try:
-		utc = get_datetime(value.replace("+0000", "+00:00")).replace(tzinfo=None)
-		return get_datetime(convert_utc_to_system_timezone(utc)).replace(tzinfo=None)
-	except Exception:
+		return datetime.fromisoformat(value.replace("+0000", "+00:00"))
+	except ValueError:
+		return None
+
+
+def submitted_at(submission: dict):
+	"""When the person sent the form, in the site's time zone (lead dates, notes); now if unknown."""
+	utc = _utc(submission)
+	if not utc:
 		return now_datetime()
+	return get_datetime(convert_utc_to_system_timezone(utc.replace(tzinfo=None))).replace(tzinfo=None)
+
+
+def submitted_server_time(submission: dict):
+	"""The same moment on the server's clock: the status change log is stamped with datetime.now() (the process's local
+	time, UTC in our containers), not the site's time zone."""
+	utc = _utc(submission)
+	return datetime.fromtimestamp(utc.timestamp()) if utc else datetime.now()
 
 
 def phone_of(submission: dict, mapping: dict) -> str | None:
@@ -132,21 +147,10 @@ def first_open_status() -> str | None:
 	return frappe.db.get_value("CRM Lead Status", {"type": "Open"}, "name", order_by="position asc")
 
 
-def status_at(lead, when) -> tuple[str | None, bool]:
-	"""(status the lead had at `when`, whether staff changed the status after `when`)."""
-	rows = sorted(
-		(r for r in lead.get("status_change_log") or [] if r.from_date),
-		key=lambda r: get_datetime(r.from_date),
-	)
-	changed_after = any(r.to_date and get_datetime(r.to_date) > when for r in rows)
-	for r in rows:
-		start = get_datetime(r.from_date)
-		end = get_datetime(r.to_date) if r.to_date else None
-		if start <= when and (end is None or when < end):
-			return r.get("from"), changed_after
-	if rows and when < get_datetime(rows[0].from_date):
-		return rows[0].get("from"), changed_after
-	return lead.status, changed_after
+def status_changed_after(lead, when) -> bool:
+	"""Whether the lead's status changed after `when` (server clock, like the status change log). If it didn't, the
+	status the person saw when submitting is the lead's current status (old log rows may carry renamed statuses)."""
+	return any(r.to_date and get_datetime(r.to_date) > when for r in lead.get("status_change_log") or [])
 
 
 # ---------------------------------------------------------------- the merge
@@ -184,8 +188,9 @@ def plan(lead_name: str, submission: dict, form_id: str, returning_after_days: i
 	if not lead.facebook_form_id:
 		fill["facebook_form_id"] = form_id
 
-	status_then, changed_after = status_at(lead, when)
-	kind = status_type(status_then)
+	changed_after = status_changed_after(lead, submitted_server_time(submission))
+	status_then = None if changed_after else lead.status
+	kind = status_type(lead.status)
 	new_status = first_open_status()
 	old_lead = get_datetime(lead.creation) < add_days(when, -cint(returning_after_days or 7))
 	if changed_after:
@@ -307,14 +312,15 @@ def note_html(p: dict, submission: dict, form_id: str, before: dict) -> str:
 		f"<p>{escape_html(form_name)} · {escape_html(p['submitted_at'][:16])} · Meta ID {escape_html(p['meta_id'])}</p>",
 		f"<ul>{rows}</ul>",
 	]
+	meta = frappe.get_meta("CRM Lead")
+
+	def labels_of(fields):
+		return escape_html(", ".join(sorted(_(meta.get_label(f)) for f in fields)))
+
 	if p["fill"]:
-		lines.append("<p>Filled empty fields: " + escape_html(", ".join(sorted(p["fill"]))) + "</p>")
+		lines.append(f"<p>Filled empty fields: {labels_of(p['fill'])}</p>")
 	if p.get("not_filled"):
-		lines.append(
-			"<p>Not filled (value not allowed in the field): "
-			+ escape_html(", ".join(sorted(p["not_filled"])))
-			+ "</p>"
-		)
+		lines.append(f"<p>Not filled (value not allowed in the field): {labels_of(p['not_filled'])}</p>")
 	if p.get("kept_meta_id"):
 		lines.append(
 			f"<p>The lead keeps its earlier Meta ID {escape_html(p['kept_meta_id'])}; this submission is {escape_html(p['meta_id'])}.</p>"
@@ -363,7 +369,9 @@ def retry_failed(source: str, dry_run: int = 1) -> dict:
 		fields=["name", "lead_data"],
 		order_by="creation asc",
 	)
-	sync = FacebookSyncSource(src.get_password("access_token"), src.facebook_lead_form, source_name=source)
+	sync = FacebookSyncSource(
+		src.get_password("access_token", raise_exception=False), src.facebook_lead_form, source_name=source
+	)
 	results, seen = [], {}
 	summary = {
 		"logs": len(logs),
