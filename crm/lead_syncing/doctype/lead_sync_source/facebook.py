@@ -51,6 +51,12 @@ class FacebookSyncSource:
 			return
 
 		question_to_field_map = self.get_form_questions_mapping()
+		settings = self.get_source_settings()
+		if settings.get("merge_duplicates"):
+			merged = self.merge_into_existing_lead(lead, question_to_field_map, settings, raise_exception)
+			if merged is not False:
+				return merged
+
 		# Meta sends some fields, like inbox_url, without any values
 		lead_data = {item["name"]: item["values"][0] for item in lead["field_data"] if item.get("values")}
 		crm_lead_data = {
@@ -76,6 +82,50 @@ class FacebookSyncSource:
 			self.create_failure_log(lead, traceback=frappe.get_traceback(with_context=True))
 			if raise_exception:
 				raise
+
+	def merge_into_existing_lead(self, lead, question_to_field_map, settings, raise_exception=False):
+		"""With "Merge into existing lead" on: apply a submission whose phone number belongs to an open lead to that lead.
+		Returns the lead name, None when there is nothing to do, or False to fall through to a normal insert."""
+		from crm.lead_syncing import merge
+
+		if merge.already_merged(lead["id"]):
+			return None
+		found = merge.find_existing_lead(merge.phone_of(lead, question_to_field_map))
+		if found.get("conflict"):
+			self.create_failure_log(
+				lead,
+				"Duplicate",
+				traceback=f"Same last 10 digits as {found['conflict']} but a different country code: not merged.",
+			)
+			if raise_exception:
+				raise DuplicateLeadError(
+					frappe._(
+						"{0} has the same last 10 digits but a different country code: not merged."
+					).format(found["conflict"])
+				)
+			return None
+		if not found.get("lead"):
+			return False
+		try:
+			return merge.apply(found["lead"], lead, self.form_id, settings.get("returning_after_days") or 7)[
+				"lead"
+			]
+		except Exception:
+			self.create_failure_log(lead, traceback=frappe.get_traceback(with_context=True))
+			if raise_exception:
+				raise
+			return None
+
+	def get_source_settings(self) -> dict:
+		name = self.get_source_name()
+		if not name:
+			return {}
+		return (
+			frappe.db.get_value(
+				"Lead Sync Source", name, ["merge_duplicates", "returning_after_days"], as_dict=True
+			)
+			or {}
+		)
 
 	def fetch_leads(self):
 		url = self.get_api_url(f"/{self.form_id}/leads")
@@ -120,6 +170,20 @@ class FacebookSyncSource:
 	def create_failure_log(
 		self, lead_data: dict | None = None, type: str = "Failure", traceback: str | None = None
 	):
+		# each run re-reads a few minutes back, so one failing submission used to get a new log every run
+		meta_id = (lead_data or {}).get("id")
+		if meta_id:
+			existing = frappe.db.get_value(
+				"Failed Lead Sync Log",
+				{
+					"source": self.get_source_name(),
+					"type": ("!=", "Synced"),
+					"lead_data": ("like", f'%"id": "{meta_id}"%'),
+				},
+				"name",
+			)
+			if existing:
+				return frappe.get_doc("Failed Lead Sync Log", existing)
 		return frappe.get_doc(
 			{
 				"doctype": "Failed Lead Sync Log",

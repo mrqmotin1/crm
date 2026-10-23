@@ -55,6 +55,68 @@
     </div>
   </div>
 
+  <div v-if="!selectedLog" class="mb-3 flex flex-col gap-2">
+    <div class="flex items-center justify-between gap-2">
+      <span class="text-sm text-ink-gray-6">
+        {{
+          __(
+            'Retry every failed submission once: duplicates are merged into the existing lead when merging is on.',
+          )
+        }}
+      </span>
+      <Button
+        :label="retryPreview ? __('Check again') : __('Retry all')"
+        :loading="retryAll.loading && retryAll.params?.dry_run"
+        @click="retryAll.submit({ source: props.source, dry_run: 1 })"
+      />
+    </div>
+    <div
+      v-if="retryPreview"
+      class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-3 text-sm text-ink-gray-8"
+    >
+      <div class="font-medium">
+        {{
+          retryPreview.dry_run
+            ? __('What a retry would do')
+            : __('Retry finished')
+        }}
+      </div>
+      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-ink-gray-7">
+        <span v-for="(value, key) in retryPreview.summary" :key="key">
+          {{ summaryLabels[key] || key }}: <b>{{ value }}</b>
+        </span>
+      </div>
+      <ul class="mt-2 max-h-40 overflow-auto">
+        <li v-for="r in retryPreview.results" :key="r.log" class="py-0.5">
+          <Badge :label="resultLabels[r.result] || r.result" />
+          <span class="ml-2">{{ r.meta_id }}</span>
+          <span v-if="r.lead" class="ml-1">→ {{ r.lead }}</span>
+          <span v-if="r.action" class="ml-1 text-ink-gray-5"
+            >({{ actionLabels[r.action] || r.action }})</span
+          >
+          <span
+            v-if="r.note || r.error || r.skipped"
+            class="ml-1 text-ink-gray-5"
+            >{{ r.note || r.error || r.skipped }}</span
+          >
+        </li>
+      </ul>
+      <div v-if="retryPreview.dry_run" class="mt-3 flex gap-2">
+        <Button
+          variant="solid"
+          :label="__('Apply')"
+          :loading="retryAll.loading && !retryAll.params?.dry_run"
+          @click="retryAll.submit({ source: props.source, dry_run: 0 })"
+        />
+        <Button
+          variant="ghost"
+          :label="__('Cancel')"
+          @click="retryPreview = null"
+        />
+      </div>
+    </div>
+  </div>
+
   <ListView
     v-if="!selectedLog && failedLeadSyncLogList?.data"
     class="h-full"
@@ -85,6 +147,8 @@ import { ref, watch } from 'vue'
 import { useDocument } from '@/data/document'
 import {
   Badge,
+  Button,
+  createResource,
   createListResource,
   Textarea,
   ListView,
@@ -106,6 +170,45 @@ const failedLeadSyncLogList = createListResource({
   },
   auto: true,
 })
+
+const retryPreview = ref(null)
+const retryAll = createResource({
+  url: 'crm.lead_syncing.merge.retry_failed',
+  onSuccess(data) {
+    retryPreview.value = data
+    if (!data.dry_run) {
+      toast.success(__('Retry finished'))
+      failedLeadSyncLogList.reload()
+    }
+  },
+  onError(e) {
+    toast.error(e.messages?.[0] || __('Error retrying failed leads'))
+  },
+})
+const summaryLabels = {
+  logs: __('Logs'),
+  submissions: __('Submissions'),
+  merged: __('Merged'),
+  inserted: __('New leads'),
+  already_in_crm: __('Already in CRM'),
+  conflicts: __('Conflicts'),
+  failed: __('Failed'),
+  repeats: __('Repeat logs'),
+}
+const resultLabels = {
+  merged: __('Merge'),
+  inserted: __('New lead'),
+  already_in_crm: __('Already in CRM'),
+  conflicts: __('Conflict'),
+  failed: __('Failed'),
+}
+const actionLabels = {
+  reopened: __('comes back to New'),
+  alerted: __('status kept, owner gets a task'),
+  restarted: __('still New, follow-up restarts'),
+  kept: __('status kept: changed after the submission'),
+  updated: __('blank fields and a note'),
+}
 
 const columns = [
   {
