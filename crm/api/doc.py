@@ -404,7 +404,9 @@ def get_data(
 
 		for kc in kanban_columns:
 			column_filters = {column_field: kc.get("name")}
-			order = kc.get("order")
+			# Cards follow the view's sort. A saved manual card order (older kanban versions stored one for every
+			# column on each move) would override it, so it is ignored.
+			order = None
 			if (column_field in filters and filters.get(column_field) != kc.get("name")) or kc.get("delete"):
 				column_data = []
 			else:

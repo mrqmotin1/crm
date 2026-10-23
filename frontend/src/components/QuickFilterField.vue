@@ -7,6 +7,16 @@
     @change.stop="updateFilter(filter, $event.target.checked)"
   />
   <FormControl
+    v-else-if="filter.fieldtype === 'Timespan'"
+    v-model="filter.value"
+    class="form-control cursor-pointer [&_select]:cursor-pointer"
+    type="select"
+    :options="filter.options"
+    :placeholder="filter.label"
+    side="bottom"
+    @update:modelValue="updateFilter(filter, $event)"
+  />
+  <FormControl
     v-else-if="filter.fieldtype === 'Select'"
     v-model="filter.value"
     class="form-control cursor-pointer [&_select]:cursor-pointer"
