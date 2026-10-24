@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-24 22:00:00.000000",
+ "description": "One WhatsApp chat: a customer number on one of our WhatsApp numbers. Kept up to date from WhatsApp Message.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "whatsapp_account",
+  "contact_number",
+  "profile_name",
+  "status",
+  "column_break_ref",
+  "reference_doctype",
+  "reference_name",
+  "owner_user",
+  "section_last",
+  "last_message",
+  "last_direction",
+  "last_message_at",
+  "column_break_last",
+  "last_incoming_at",
+  "unread"
+ ],
+ "fields": [
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Data",
+   "label": "WhatsApp Account",
+   "in_list_view": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "contact_number",
+   "fieldtype": "Data",
+   "label": "Contact Number",
+   "in_list_view": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "profile_name",
+   "fieldtype": "Data",
+   "label": "Profile Name",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nDone",
+   "default": "Open",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Doctype",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype",
+   "search_index": 1
+  },
+  {
+   "fieldname": "owner_user",
+   "fieldtype": "Link",
+   "label": "Owner",
+   "options": "User",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_last",
+   "fieldtype": "Section Break",
+   "label": "Last Message"
+  },
+  {
+   "fieldname": "last_message",
+   "fieldtype": "Small Text",
+   "label": "Last Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_direction",
+   "fieldtype": "Data",
+   "label": "Last Direction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message_at",
+   "fieldtype": "Datetime",
+   "label": "Last Message At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_last",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_incoming_at",
+   "fieldtype": "Datetime",
+   "label": "Last Incoming At",
+   "read_only": 1,
+   "description": "Free-form replies are allowed for 24 hours after this (Meta's customer service window)."
+  },
+  {
+   "fieldname": "unread",
+   "fieldtype": "Int",
+   "label": "Unread",
+   "read_only": 1,
+   "default": "0"
+  }
+ ],
+ "grid_page_length": 50,
+ "links": [],
+ "modified": "2026-10-24 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM WhatsApp Conversation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0
+  },
+  {
+   "role": "Sales User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "last_message_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "profile_name",
+ "track_changes": 0
+}

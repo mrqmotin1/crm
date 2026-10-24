@@ -100,6 +100,9 @@ setup_wizard_complete = "crm.demo.api.create_demo_data"
 before_install = "crm.install.before_install"
 after_install = "crm.install.after_install"
 
+# another app installed on the site (frappe_whatsapp: the inbox field and roles)
+after_app_install = "crm.api.whatsapp_inbox.after_app_install"
+
 # Uninstallation
 # ------------
 
@@ -268,10 +271,11 @@ doc_events = {
 		"on_update": [
 			"crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.create_customer_in_erpnext",
 			"crm.automation.events.on_deal_update",
+			"crm.api.whatsapp_inbox.on_record_owner_change",
 		],
 	},
 	"CRM Lead": {
-		"on_update": ["crm.automation.events.on_lead_update"],
+		"on_update": ["crm.automation.events.on_lead_update", "crm.api.whatsapp_inbox.on_record_owner_change"],
 	},
 	"Sales Order": {
 		"before_validate": [
@@ -406,6 +410,7 @@ ignore_links_on_delete = ["Failed Lead Sync Log"]
 after_migrate = [
 	"crm.fcrm.doctype.fcrm_settings.fcrm_settings.after_migrate",
 	"crm.api.whatsapp.add_roles",
+	"crm.api.whatsapp_inbox.after_migrate",
 	"crm.install.add_default_scripts",
 	"crm.install.add_web_form_custom_fields",
 ]

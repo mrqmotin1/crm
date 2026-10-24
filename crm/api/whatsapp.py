@@ -9,6 +9,29 @@ from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
 from crm.integrations.api import get_contact_lead_or_deal_from_number
 
 ALLOWED_WHATSAPP_ROLES = ["System Manager", "Sales Manager", "Sales User"]
+MESSAGE_FIELDS = [
+	"name",
+	"type",
+	"to",
+	"from",
+	"content_type",
+	"message_type",
+	"attach",
+	"template",
+	"use_template",
+	"message_id",
+	"is_reply",
+	"reply_to_message_id",
+	"creation",
+	"message",
+	"status",
+	"reference_doctype",
+	"reference_name",
+	"template_parameters",
+	"template_header_parameters",
+	"profile_name",
+	"whatsapp_account",
+]
 
 
 def validate_access(reference_doctype=None, reference_name=None, permtype="read"):
@@ -35,8 +58,10 @@ def validate_access(reference_doctype=None, reference_name=None, permtype="read"
 
 
 def validate(doc, method):
+	is_new = doc.is_new()
 	phone_number = doc.get("from") if doc.type == "Incoming" else doc.get("to")
-	if phone_number:
+	# a message that already has its record (sent from a lead page, or linked by a hook or by hand) keeps it
+	if phone_number and not (doc.reference_doctype and doc.reference_name):
 		try:
 			name, doctype = get_contact_lead_or_deal_from_number(phone_number)
 			if doctype and name is not None:
@@ -44,6 +69,30 @@ def validate(doc, method):
 				doc.reference_name = name
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), "CRM WhatsApp: failed to resolve contact from number")
+
+	if not is_new:
+		return
+	if doc.type == "Incoming":
+		run_incoming_hooks(doc)
+	from crm.api.whatsapp_inbox import track_message
+
+	doc.flags.crm_new_message = True
+	doc.flags.crm_conversation = track_message(doc)
+
+
+def run_incoming_hooks(doc):
+	"""Hook `crm_whatsapp_incoming(doc)`: may return (doctype, name) to link a new incoming message to, e.g. a lead
+	found by another number rule or created for a new sender. A failing hook never loses the message."""
+	for method in frappe.get_hooks("crm_whatsapp_incoming"):
+		frappe.db.savepoint("crm_whatsapp_incoming")
+		try:
+			result = frappe.get_attr(method)(doc)
+		except Exception:
+			frappe.db.rollback(save_point="crm_whatsapp_incoming")
+			frappe.log_error(frappe.get_traceback(), f"CRM WhatsApp: hook {method} failed")
+			continue
+		if result:
+			doc.reference_doctype, doc.reference_name = result
 
 
 def on_update(doc, method):
@@ -54,8 +103,12 @@ def on_update(doc, method):
 			"reference_name": doc.reference_name,
 		},
 	)
+	from crm.api.whatsapp_inbox import FIELD, publish
 
-	notify_agent(doc)
+	publish(doc.flags.get("crm_conversation") or doc.get(FIELD))
+	# status updates (sent, delivered, read) save the message again: notify on arrival only
+	if doc.flags.get("crm_new_message"):
+		notify_agent(doc)
 
 
 def notify_agent(doc):
@@ -131,27 +184,7 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 					"reference_doctype": "CRM Lead",
 					"reference_name": lead,
 				},
-				fields=[
-					"name",
-					"type",
-					"to",
-					"from",
-					"content_type",
-					"message_type",
-					"attach",
-					"template",
-					"use_template",
-					"message_id",
-					"is_reply",
-					"reply_to_message_id",
-					"creation",
-					"message",
-					"status",
-					"reference_doctype",
-					"reference_name",
-					"template_parameters",
-					"template_header_parameters",
-				],
+				fields=MESSAGE_FIELDS,
 			)
 
 	messages += frappe.get_all(
@@ -160,29 +193,13 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 			"reference_doctype": reference_doctype,
 			"reference_name": reference_name,
 		},
-		fields=[
-			"name",
-			"type",
-			"to",
-			"from",
-			"content_type",
-			"message_type",
-			"attach",
-			"template",
-			"use_template",
-			"message_id",
-			"is_reply",
-			"reply_to_message_id",
-			"creation",
-			"message",
-			"status",
-			"reference_doctype",
-			"reference_name",
-			"template_parameters",
-			"template_header_parameters",
-		],
+		fields=MESSAGE_FIELDS,
 	)
+	return enrich_messages(messages)
 
+
+def enrich_messages(messages, profile_name=None):
+	"""Templates filled in, reactions and replies attached to their messages, sender names (also used by the inbox)."""
 	# Filter messages to get only Template messages
 	template_messages = [message for message in messages if message["message_type"] == "Template"]
 
@@ -223,7 +240,7 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 			reacted_message["reaction"] = reaction_message["message"]
 
 	for message in messages:
-		from_name = get_from_name(message) if message["from"] else _("You")
+		from_name = get_from_name(message, profile_name) if message["from"] else _("You")
 		message["from_name"] = from_name
 	# Filter messages to get only replies
 	reply_messages = [message for message in messages if message["is_reply"]]
@@ -238,7 +255,7 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 
 		# If the replied message is found, add the reply details to the reply message
 		if replied_message:
-			from_name = get_from_name(reply_message) if replied_message["from"] else _("You")
+			from_name = get_from_name(reply_message, profile_name) if replied_message["from"] else _("You")
 			message = replied_message["message"]
 			if replied_message["message_type"] == "Template":
 				message = replied_message["template"]
@@ -286,13 +303,24 @@ def create_whatsapp_message(
 			"reference_doctype": reference_doctype,
 			"reference_name": reference_name,
 			"message": message or attach,
-			"to": to,
 			"attach": attach,
 			"content_type": content_type,
+			**_route(reference_doctype, reference_name, to),
 		}
 	)
 	doc.insert(ignore_permissions=True)
 	return doc.name
+
+
+def _route(reference_doctype, reference_name, to):
+	"""`to` in international form and the account the customer last wrote to (else frappe_whatsapp's default)."""
+	from crm.api.whatsapp_inbox import account_for, normalize_number
+
+	out = {"to": normalize_number(to) or to}
+	account = account_for(reference_doctype, reference_name, to)
+	if account:
+		out["whatsapp_account"] = account
+	return out
 
 
 @frappe.whitelist()
@@ -308,7 +336,7 @@ def send_whatsapp_template(reference_doctype: str, reference_name: str, template
 			"content_type": "text",
 			"use_template": True,
 			"template": template,
-			"to": to,
+			**_route(reference_doctype, reference_name, to),
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -337,6 +365,7 @@ def react_on_whatsapp_message(emoji: str, reply_to_name: str):
 			"to": to,
 			"reply_to_message_id": reply_to_doc.message_id,
 			"content_type": "reaction",
+			"whatsapp_account": reply_to_doc.get("whatsapp_account"),
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -351,7 +380,11 @@ def parse_template_parameters(string, parameters):
 	return string
 
 
-def get_from_name(message):
+def get_from_name(message, profile_name=None):
+	if not message.get("reference_doctype") or not message.get("reference_name"):
+		return message.get("profile_name") or profile_name or message.get("from")
+	if not frappe.db.exists(message["reference_doctype"], message["reference_name"]):
+		return message.get("profile_name") or profile_name or message.get("from")
 	doc = frappe.get_doc(message["reference_doctype"], message["reference_name"])
 	from_name = ""
 	if message["reference_doctype"] == "CRM Deal":

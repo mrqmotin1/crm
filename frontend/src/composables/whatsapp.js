@@ -21,3 +21,17 @@ createResource({
     isWhatsappInstalled.value = Boolean(data)
   },
 })
+
+// unread WhatsApp conversations the user can see (sidebar badge); refreshed by the inbox and on "whatsapp_inbox" events
+export const whatsappUnread = ref(0)
+
+const whatsappUnreadResource = createResource({
+  url: 'crm.api.whatsapp_inbox.unread_count',
+  onSuccess: (data) => {
+    whatsappUnread.value = Number(data) || 0
+  },
+})
+
+export function refreshWhatsappUnread() {
+  if (isWhatsappInstalled.value) whatsappUnreadResource.reload()
+}
