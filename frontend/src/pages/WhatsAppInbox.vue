@@ -153,7 +153,7 @@
               />
             </template>
             <Button
-              v-else
+              v-if="!conversation.data.reference || conversation.data.reference.doctype == 'Contact'"
               variant="solid"
               :label="__('Create lead')"
               :loading="creatingLead"
@@ -363,6 +363,10 @@ function shortTime(dt) {
 }
 
 function openRecord(ref) {
+  if (ref.doctype === 'Contact') {
+    router.push({ name: 'Contact', params: { contactId: ref.name } })
+    return
+  }
   const name = ref.doctype === 'CRM Deal' ? 'Deal' : 'Lead'
   const params = name === 'Deal' ? { dealId: ref.name } : { leadId: ref.name }
   router.push({ name, params, hash: '#whatsapp' })

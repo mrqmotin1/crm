@@ -333,6 +333,9 @@ def list_conversations(scope="all", unread=0, search=None, account=None, status=
 			t = frappe.db.get_value(row.reference_doctype, row.reference_name, [title_field, "status"], as_dict=True)
 			if t:
 				row.reference_title, row.reference_status = t.get(title_field), t.status
+		elif row.reference_doctype == "Contact" and row.reference_name:
+			row.reference_title = frappe.db.get_value("Contact", row.reference_name, "full_name") or row.reference_name
+			row.reference_status = _("Contact")
 	return rows
 
 
@@ -354,6 +357,13 @@ def get_conversation(conversation: str):
 	out.window_open = window_open(doc.last_incoming_at)
 	out.can_send = can_send(doc.whatsapp_account)
 	out.reference = None
+	if doc.reference_doctype == "Contact" and doc.reference_name:
+		out.reference = frappe._dict(
+			doctype="Contact",
+			name=doc.reference_name,
+			title=frappe.db.get_value("Contact", doc.reference_name, "full_name") or doc.reference_name,
+			status=_("Contact"),
+		)
 	if doc.reference_doctype in ("CRM Lead", "CRM Deal") and doc.reference_name and frappe.has_permission(
 		doc.reference_doctype, "read", doc=doc.reference_name
 	):
@@ -446,7 +456,7 @@ def link_record(conversation: str, reference_doctype: str, reference_name: str):
 @frappe.whitelist()
 def create_lead(conversation: str):
 	doc = _get(conversation)
-	if doc.reference_name:
+	if doc.reference_name and doc.reference_doctype != "Contact":
 		frappe.throw(_("This conversation is already linked to {0}.").format(doc.reference_name))
 	lead = frappe.new_doc("CRM Lead")
 	lead.first_name = doc.profile_name or ("+" + doc.contact_number)
