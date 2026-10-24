@@ -17,10 +17,9 @@
           </div>
           <FormControl
             v-if="options.reasons"
+            v-model="lostReason"
             type="select"
             :options="['', ...options.reasons]"
-            :value="lostReason"
-            @change="(e) => (lostReason = e.target.value)"
           />
           <Link
             v-else
@@ -38,10 +37,9 @@
             <span v-if="lostReason == 'Other'" class="text-ink-red-5">*</span>
           </div>
           <FormControl
+            v-model="lostNotes"
             class="form-control flex-1 truncate"
             type="textarea"
-            :value="lostNotes"
-            @change="(e) => (lostNotes = e.target.value)"
           />
         </div>
       </div>
