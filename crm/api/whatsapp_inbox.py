@@ -356,6 +356,7 @@ def get_conversation(conversation: str):
 	out.account_number = frappe.db.get_value("WhatsApp Account", doc.whatsapp_account, "phone_id")
 	out.window_open = window_open(doc.last_incoming_at)
 	out.can_send = can_send(doc.whatsapp_account)
+	out.can_draft = bool(frappe.get_hooks("crm_whatsapp_draft_reply"))
 	out.reference = None
 	if doc.reference_doctype == "Contact" and doc.reference_name:
 		out.reference = frappe._dict(
@@ -466,6 +467,18 @@ def create_lead(conversation: str):
 	lead.insert()
 	_relink(doc, "CRM Lead", lead.name)
 	return lead.name
+
+
+@frappe.whitelist(methods=["POST"])
+def draft_reply(conversation: str, language: str | None = None):
+	"""A draft for the composer from the app that registered hook `crm_whatsapp_draft_reply(conversation, language)`
+	(e.g. an AI assistant). It only returns text; the rep edits and sends it."""
+	_get(conversation, "write")
+	methods = frappe.get_hooks("crm_whatsapp_draft_reply")
+	if not methods:
+		frappe.throw(_("No draft assistant is installed."))
+	out = frappe.get_attr(methods[-1])(conversation, language=language)
+	return {"reply": (out or {}).get("reply") or ""}
 
 
 def _new_outgoing(doc, values):

@@ -164,6 +164,25 @@ class TestWhatsAppInbox(TestCase):
 		self.assertEqual(frappe.db.get_value("WhatsApp Message", msg.name, "reference_name"), lead)
 		self.assertEqual(inbox.normalize_number(frappe.db.get_value("CRM Lead", lead, "mobile_no")), sender)
 
+	def test_draft_reply_hook(self):
+		sender = number()
+		self.incoming(sender, "price?")
+		name = self.conversation(sender)
+		orig = frappe.get_hooks
+		with patch.object(
+			frappe,
+			"get_hooks",
+			side_effect=lambda h=None, *a, **k: ["crm.api.test_whatsapp_inbox.fake_draft"]
+			if h == "crm_whatsapp_draft_reply"
+			else orig(h, *a, **k),
+		):
+			self.assertTrue(inbox.get_conversation(name).can_draft)
+			self.assertEqual(inbox.draft_reply(name)["reply"], f"draft for {name}")
+		frappe.db.set_value("CRM WhatsApp Conversation", name, "owner_user", OTHER)
+		frappe.set_user(REP)
+		with self.assertRaises(frappe.PermissionError):
+			inbox.draft_reply(name)  # same access as replying
+
 	def test_hooks(self):
 		sender = number()
 		self.incoming_hooks = ["crm.api.test_whatsapp_inbox.broken_hook"]
@@ -188,3 +207,7 @@ def broken_hook(doc):
 
 def linking_hook(doc):
 	return "CRM Lead", frappe.flags.test_hook_lead
+
+
+def fake_draft(conversation, language=None):
+	return {"reply": f"draft for {conversation}"}

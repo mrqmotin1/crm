@@ -215,13 +215,22 @@
                   </Dropdown>
                 </template>
               </FileUploader>
+              <Button
+                v-if="conversation.data.can_draft"
+                variant="ghost"
+                :loading="drafting"
+                :title="__('Draft a reply with Mona (you review and send it)')"
+                @click="draftReply"
+              >
+                <template #icon><span aria-hidden="true">✨</span></template>
+              </Button>
               <Textarea
                 v-model="content"
                 class="min-h-8 w-full"
                 :rows="rows"
                 :placeholder="__('Type your message here...')"
                 @focus="rows = 4"
-                @blur="rows = 1"
+                @blur="rows = content ? 4 : 1"
                 @keydown.enter.exact.prevent="sendText"
               />
               <Button
@@ -294,6 +303,7 @@ const rows = ref(1)
 const sending = ref(false)
 const creatingLead = ref(false)
 const showTemplates = ref(false)
+const drafting = ref(false)
 const threadEl = ref(null)
 
 const conversations = createResource({
@@ -425,6 +435,23 @@ function uploadOptions(openFileSelector) {
       },
     },
   ]
+}
+
+async function draftReply() {
+  drafting.value = true
+  try {
+    const out = await call('crm.api.whatsapp_inbox.draft_reply', {
+      conversation: selected.value,
+    })
+    if (out?.reply) {
+      content.value = out.reply
+      rows.value = 4
+    }
+  } catch (e) {
+    toast.error(e.messages?.[0] || __('Could not draft a reply'))
+  } finally {
+    drafting.value = false
+  }
 }
 
 function sendTemplate(template) {
