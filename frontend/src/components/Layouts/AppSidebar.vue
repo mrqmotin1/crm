@@ -93,6 +93,14 @@
                 >
                   <span class="truncate text-sm">{{ __(link.label) }}</span>
                 </Tooltip>
+                <template v-if="link.key === 'WhatsApp' && whatsappUnread" #suffix>
+                  <Badge
+                    class="mr-2"
+                    :label="whatsappUnread"
+                    theme="green"
+                    variant="subtle"
+                  />
+                </template>
               </SidebarItem>
             </nav>
           </CollapsibleSection>
@@ -186,6 +194,11 @@ import UserDropdown from '@/components/UserDropdown.vue'
 import SquareAsterisk from '@/components/Icons/SquareAsterisk.vue'
 import WebsiteIcon from '@/components/Icons/WebsiteIcon.vue'
 import { getNavigationItems } from '@/utils/navigation'
+import {
+  isWhatsappInstalled,
+  whatsappUnread,
+  refreshWhatsappUnread,
+} from '@/composables/whatsapp'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
@@ -199,6 +212,7 @@ import HelpIcon from '@/components/Icons/HelpIcon.vue'
 import Notifications from '@/components/Notifications.vue'
 import Settings from '@/components/Settings/Settings.vue'
 import { viewsStore } from '@/stores/views'
+import { globalStore } from '@/stores/global'
 import {
   unreadNotificationsCount,
   notificationsStore,
@@ -251,9 +265,20 @@ const isCollapsed = computed(() => isSidebarCollapsed.value && !props.mobile)
 const isFCSite = ref(window.is_fc_site)
 const isDemoSite = ref(window.is_demo_site)
 
-const links = getNavigationItems({ mobile: props.mobile })
+// WhatsApp inbox badge: unread conversations, kept fresh by the inbox's realtime event
+const { $socket } = globalStore()
+watch(
+  isWhatsappInstalled,
+  (installed) => {
+    if (installed) refreshWhatsappUnread()
+  },
+  { immediate: true },
+)
+onMounted(() => $socket?.on('whatsapp_inbox', refreshWhatsappUnread))
 
 const allViews = computed(() => {
+  // inside the computed: the WhatsApp item appears once the site says frappe_whatsapp is installed
+  const links = getNavigationItems({ mobile: props.mobile })
   let _views = [
     {
       name: 'All Views',

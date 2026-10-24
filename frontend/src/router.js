@@ -61,6 +61,11 @@ const routes = [
     props: true,
   },
   {
+    path: '/whatsapp',
+    name: 'WhatsApp',
+    component: () => import('@/pages/WhatsAppInbox.vue'),
+  },
+  {
     alias: '/notes',
     path: '/notes/view/:viewType?',
     name: 'Notes',
