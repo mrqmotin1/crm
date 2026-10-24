@@ -207,7 +207,8 @@
               />
               <Button variant="ghost" icon="x" @click="reply = {}" />
             </div>
-            <div class="flex items-end gap-2 px-3 py-2.5 sm:px-10">
+            <!-- right padding keeps the send button clear of floating launchers (e.g. "Ask Mona") -->
+            <div class="flex items-end gap-2 py-2.5 pl-3 pr-3 sm:pl-10 sm:pr-36">
               <FileUploader @success="(file) => sendFile(file)">
                 <template #default="{ openFileSelector }">
                   <Dropdown :options="uploadOptions(openFileSelector)">
