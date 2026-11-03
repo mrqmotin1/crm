@@ -323,9 +323,35 @@ def _route(reference_doctype, reference_name, to):
 	return out
 
 
+def template_hook(name: str):
+	"""The last app's method for a template hook (crm_whatsapp_template_form / crm_whatsapp_send_template), or None."""
+	methods = frappe.get_hooks(name)
+	return frappe.get_attr(methods[-1]) if methods else None
+
+
 @frappe.whitelist()
-def send_whatsapp_template(reference_doctype: str, reference_name: str, template: str, to: str):
+def whatsapp_template_form(reference_doctype: str, reference_name: str, template: str, language: str | None = None):
+	"""What to ask before sending `template` (language, variables pre-filled), from hook `crm_whatsapp_template_form`.
+	None: the template is sent as before, with its field_names."""
 	validate_access(reference_doctype, reference_name)
+	hook = template_hook("crm_whatsapp_template_form")
+	return hook(reference_doctype, reference_name, template, language) if hook else None
+
+
+@frappe.whitelist()
+def send_whatsapp_template(
+	reference_doctype: str,
+	reference_name: str,
+	template: str,
+	to: str,
+	values: str | dict | None = None,
+	language: str | None = None,
+):
+	validate_access(reference_doctype, reference_name)
+	hook = template_hook("crm_whatsapp_send_template")
+	if hook and values is not None:
+		values = frappe.parse_json(values) if isinstance(values, str) else values
+		return hook(reference_doctype, reference_name, template, values, language, _route(reference_doctype, reference_name, to))
 	doc = frappe.new_doc("WhatsApp Message")
 	doc.update(
 		{

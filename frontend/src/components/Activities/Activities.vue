@@ -428,6 +428,8 @@
     v-if="whatsappEnabled"
     v-model="showWhatsappTemplates"
     :doctype="doctype"
+    :reference-doctype="doctype"
+    :reference-name="docname"
     @send="(t) => sendTemplate(t)"
   />
   <AllModals
@@ -624,13 +626,15 @@ function handleDocinfoUpdate({ doc, key }) {
 function sendTemplate(template) {
   showWhatsappTemplates.value = false
   capture('send_whatsapp_template', { doctype: props.doctype })
+  // a string: the record as before; an object: an app's form (template, language, values)
+  const picked = typeof template === 'object' ? template : { template }
   createResource({
     url: 'crm.api.whatsapp.send_whatsapp_template',
     params: {
       reference_doctype: props.doctype,
       reference_name: props.docname,
       to: doc.value.mobile_no,
-      template,
+      ...picked,
     },
     auto: true,
     onError: (error) => {

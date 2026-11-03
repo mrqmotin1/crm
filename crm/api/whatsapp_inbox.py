@@ -517,8 +517,17 @@ def send(conversation: str, message: str = "", attach: str = "", content_type: s
 
 
 @frappe.whitelist()
-def send_template(conversation: str, template: str):
+def send_template(conversation: str, template: str, values: str | dict | None = None, language: str | None = None):
 	doc = _get(conversation, "write")
+	from crm.api.whatsapp import template_hook
+
+	hook = template_hook("crm_whatsapp_send_template")
+	if hook and values is not None and doc.reference_doctype and doc.reference_name:
+		if not can_send(doc.whatsapp_account):
+			frappe.throw(_("Sending isn't switched on for this WhatsApp number yet (receive-only)."))
+		values = frappe.parse_json(values) if isinstance(values, str) else values
+		route = {"to": doc.contact_number, "whatsapp_account": doc.whatsapp_account}
+		return hook(doc.reference_doctype, doc.reference_name, template, values, language, route)
 	return _new_outgoing(
 		doc,
 		{

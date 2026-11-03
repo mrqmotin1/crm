@@ -255,6 +255,8 @@
     <WhatsappTemplateSelectorModal
       v-model="showTemplates"
       :doctype="conversation.data?.reference_doctype || ''"
+      :reference-doctype="conversation.data?.reference_doctype || ''"
+      :reference-name="conversation.data?.reference_name || ''"
       @send="(t) => sendTemplate(t)"
     />
   </div>
@@ -457,7 +459,7 @@ async function draftReply() {
 
 function sendTemplate(template) {
   showTemplates.value = false
-  send('send_template', { template })
+  send('send_template', typeof template === 'object' ? template : { template })
 }
 
 async function setStatus(value) {
