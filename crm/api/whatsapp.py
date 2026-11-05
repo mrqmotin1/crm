@@ -330,6 +330,15 @@ def template_hook(name: str):
 
 
 @frappe.whitelist()
+def whatsapp_template_groups(reference_doctype: str, reference_name: str):
+	"""Filter chips for the template picker, from hook `crm_whatsapp_template_groups`:
+	{"groups": [{"key", "label", "templates": [actual names]}], "default": key or None}. None: no chips."""
+	validate_access(reference_doctype, reference_name)
+	hook = template_hook("crm_whatsapp_template_groups")
+	return hook(reference_doctype, reference_name) if hook else None
+
+
+@frappe.whitelist()
 def whatsapp_template_form(reference_doctype: str, reference_name: str, template: str, language: str | None = None):
 	"""What to ask before sending `template` (language, variables pre-filled), from hook `crm_whatsapp_template_form`.
 	None: the template is sent as before, with its field_names."""
