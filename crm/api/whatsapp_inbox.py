@@ -163,8 +163,8 @@ def track_message(doc, at=None) -> str | None:
 		)
 		if doc.get("profile_name"):
 			values["profile_name"] = doc.profile_name
-	else:
-		values["unread"] = 0
+	elif (doc.get("owner") or frappe.session.user) not in set(frappe.get_hooks("crm_assistant_users") or []):
+		values["unread"] = 0  # a person answered; an AI assistant's reply leaves the chat unread for the team
 	if doc.get("reference_doctype") and doc.get("reference_name"):
 		values.update(
 			{
@@ -357,6 +357,9 @@ def get_conversation(conversation: str):
 	out.window_open = window_open(doc.last_incoming_at)
 	out.can_send = can_send(doc.whatsapp_account)
 	out.can_draft = bool(frappe.get_hooks("crm_whatsapp_draft_reply"))
+	# an AI assistant app (hook crm_whatsapp_set_handler) keeps who answers this chat in the ai_* fields
+	if frappe.get_hooks("crm_whatsapp_set_handler") and doc.get("ai_handler"):
+		out.assistant = frappe._dict(handler=doc.ai_handler, reason=doc.get("ai_handover_reason"), stage=doc.get("ai_stage"))
 	out.reference = None
 	if doc.reference_doctype == "Contact" and doc.reference_name:
 		out.reference = frappe._dict(
@@ -413,6 +416,18 @@ def mark_read(conversation: str):
 		doc.db_set("unread", 0, update_modified=False)
 		publish(doc.name)
 	return True
+
+
+@frappe.whitelist(methods=["POST"])
+def set_handler(conversation: str, handler: str):
+	"""Take over from / hand back to the AI assistant, or pause it (hook crm_whatsapp_set_handler)."""
+	methods = frappe.get_hooks("crm_whatsapp_set_handler")
+	if not methods:
+		frappe.throw(_("No AI assistant is set up for WhatsApp."))
+	_get(conversation, "write")
+	out = frappe.get_attr(methods[-1])(conversation, handler)
+	publish(conversation)
+	return out
 
 
 @frappe.whitelist()

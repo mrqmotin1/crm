@@ -159,6 +159,26 @@
               :loading="creatingLead"
               @click="createLead"
             />
+            <template v-if="conversation.data.assistant">
+              <Badge
+                :theme="conversation.data.assistant.handler == 'Mona' ? 'green' : 'gray'"
+                variant="subtle"
+                :label="conversation.data.assistant.handler == 'Mona' ? __('✨ Mona answering') : conversation.data.assistant.handler == 'Paused' ? __('Mona paused') : __('Rep')"
+                :title="conversation.data.assistant.reason || conversation.data.assistant.stage || ''"
+              />
+              <Button
+                v-if="conversation.data.assistant.handler == 'Mona'"
+                :label="isMobileView ? '' : __('Take over')"
+                icon-left="user"
+                @click="setHandler('Rep')"
+              />
+              <Button
+                v-else
+                :label="isMobileView ? '' : __('Hand back to Mona')"
+                icon-left="corner-up-right"
+                @click="setHandler('Mona')"
+              />
+            </template>
             <Button
               v-if="conversation.data.status == 'Open'"
               :label="__('Done')"
@@ -460,6 +480,16 @@ async function draftReply() {
 function sendTemplate(template) {
   showTemplates.value = false
   send('send_template', typeof template === 'object' ? template : { template })
+}
+
+async function setHandler(handler) {
+  try {
+    await call('crm.api.whatsapp_inbox.set_handler', { conversation: selected.value, handler })
+    toast.success(handler == 'Mona' ? __('Mona answers this chat again') : __('You have this chat now'))
+  } catch (e) {
+    toast.error(e.messages?.[0] || __('Could not change who answers'))
+  }
+  conversation.reload()
 }
 
 async function setStatus(value) {
