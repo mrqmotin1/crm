@@ -213,11 +213,13 @@ const grouped = computed(() => {
 
 // stage chips from the app; the record's own stage is chosen when the picker opens
 const groups = ref([])
+const hidden = ref([])
 const defaultGroup = ref(null)
 const group = ref('all')
 
 async function loadGroups() {
   groups.value = []
+  hidden.value = []
   defaultGroup.value = null
   group.value = 'all'
   if (!props.referenceName) return
@@ -227,6 +229,7 @@ async function loadGroups() {
       reference_name: props.referenceName,
     })
     groups.value = out?.groups || []
+    hidden.value = out?.hidden || []
     defaultGroup.value = out?.default || null
     group.value = defaultGroup.value || 'all'
   } catch {
@@ -238,6 +241,7 @@ const filteredTemplates = computed(() => {
   const chosen = groups.value.find((g) => g.key === group.value)
   return grouped.value.filter(
     (t) =>
+      !hidden.value.includes(t.key) &&
       (!chosen || chosen.templates.includes(t.key)) &&
       t.key.toLowerCase().includes(search.value.toLowerCase()),
   )
