@@ -142,6 +142,10 @@ def track_message(doc, at=None) -> str | None:
 
 	conversation = get_or_create(account, number, doc.get("profile_name") if incoming else None)
 	at = at or now_datetime()
+	# a blocked sender (block()): the message is kept, silently: no unread mark, the chat stays closed
+	silent = incoming and cint(conversation.get("blocked"))
+	if silent:
+		doc.flags.crm_blocked = True
 	text = doc.get("message") or ""
 	if doc.get("message_type") == "Template":
 		text = _("Template: {0}").format(doc.get("template") or "")
@@ -153,7 +157,9 @@ def track_message(doc, at=None) -> str | None:
 		"last_direction": doc.type,
 		"last_message_at": at,
 	}
-	if incoming:
+	if silent:
+		values["last_incoming_at"] = at
+	elif incoming:
 		values.update(
 			{
 				"last_incoming_at": at,
@@ -200,6 +206,22 @@ def unread_changed(conversation, previous_reference=None):
 	for doctype, name in references:
 		if doctype and name:
 			frappe.publish_realtime("crm_kanban_refresh", {"doctype": doctype, "name": name}, after_commit=True)
+
+
+def has_block_field() -> bool:
+	return frappe.get_meta("CRM WhatsApp Conversation").has_field("blocked")
+
+
+def is_blocked(account, number) -> bool:
+	"""This sender is blocked on this number of ours (block())."""
+	number = normalize_number(number)
+	if not account or not number or not has_block_field():
+		return False
+	return bool(
+		frappe.db.exists(
+			"CRM WhatsApp Conversation", {"whatsapp_account": account, "contact_number": number, "blocked": 1}
+		)
+	)
 
 
 def publish(conversation: str | None):
@@ -326,11 +348,12 @@ def _rows(scope="all", unread=0, search=None, account=None, status="Open", start
 		conditions.append("(c.owner_user = %(user)s or ifnull(c.owner_user, '') = '')")
 	values["user"] = user
 	where = " and ".join(conditions) or "1=1"
+	blocked = "c.blocked" if has_block_field() else "0 as blocked"
 	# over-fetch a little: unowned rows are checked against the record's assignments below
 	rows = frappe.db.sql(
 		f"""select c.name, c.profile_name, c.contact_number, c.whatsapp_account, c.reference_doctype,
 			c.reference_name, c.owner_user, c.last_message, c.last_direction, c.last_message_at,
-			c.last_incoming_at, c.unread, c.status
+			c.last_incoming_at, c.unread, c.status, {blocked}
 		from `tabCRM WhatsApp Conversation` c where {where}
 		order by c.last_message_at desc limit %(limit)s offset %(start)s""",
 		{**values, "limit": cint(limit) * 2 + 10, "start": cint(start)},
@@ -380,6 +403,8 @@ def get_conversation(conversation: str):
 	out.window_open = window_open(doc.last_incoming_at)
 	out.can_send = can_send(doc.whatsapp_account)
 	out.can_draft = bool(frappe.get_hooks("crm_whatsapp_draft_reply"))
+	if cint(doc.get("blocked")):
+		out.blocked_by_name = frappe.db.get_value("User", doc.blocked_by, "full_name") or doc.blocked_by
 	# an AI assistant app (hook crm_whatsapp_set_handler) keeps who answers this chat in the ai_* fields
 	if frappe.get_hooks("crm_whatsapp_set_handler") and doc.get("ai_handler"):
 		out.assistant = frappe._dict(handler=doc.ai_handler, reason=doc.get("ai_handover_reason"), stage=doc.get("ai_stage"))
@@ -650,6 +675,77 @@ def set_handler(conversation: str, handler: str):
 	return out
 
 
+def _block_hooks(doc, blocked: bool):
+	"""Hook `crm_whatsapp_blocked(conversation, blocked=True/False)`: an app's own follow-up (e.g. mark the lead as spam)."""
+	for method in frappe.get_hooks("crm_whatsapp_blocked"):
+		frappe.db.savepoint("crm_whatsapp_blocked")
+		try:
+			frappe.get_attr(method)(doc, blocked=blocked)
+		except Exception:
+			frappe.db.rollback(save_point="crm_whatsapp_blocked")
+			frappe.log_error(frappe.get_traceback(), f"CRM WhatsApp: hook {method} failed")
+
+
+def _block_on_whatsapp(doc, unblock: bool = False) -> dict:
+	if not can_send(doc.whatsapp_account):
+		return {"ok": False, "error": _("This WhatsApp number has no access token (receive-only).")}
+	try:
+		from frappe_whatsapp.utils import block_number
+	except ImportError:
+		return {"ok": False, "error": _("The WhatsApp app on this site can't block numbers yet.")}
+	return block_number(doc.whatsapp_account, doc.contact_number, unblock=unblock)
+
+
+@frappe.whitelist(methods=["POST"])
+def block(conversation: str):
+	"""Block the sender of this chat (abuse, spam): WhatsApp stops delivering their messages to this number of ours,
+	the chat is closed, and apps get `crm_whatsapp_blocked`. WhatsApp only blocks someone who wrote in the last 24
+	hours; when it refuses, the block still holds in the CRM: later messages are kept silently (no unread mark, no
+	lead handling, no notification). Same access as replying in the chat."""
+	doc = _get(conversation, "write")
+	if not has_block_field():
+		frappe.throw(_("Blocking isn't set up on this site yet."))
+	if cint(doc.blocked):
+		return {"on_whatsapp": bool(cint(doc.blocked_on_whatsapp)), "error": doc.block_note}
+	result = _block_on_whatsapp(doc)
+	had_unread = cint(doc.unread)
+	doc.db_set(
+		{
+			"blocked": 1,
+			"blocked_on_whatsapp": 1 if result.get("ok") else 0,
+			"blocked_by": frappe.session.user,
+			"blocked_at": now_datetime(),
+			"block_note": None if result.get("ok") else (result.get("error") or "")[:300],
+			"status": "Done",
+			"unread": 0,
+		},
+		update_modified=False,
+	)
+	if had_unread:
+		unread_changed(doc)
+	_block_hooks(doc, True)
+	publish(doc.name)
+	return {"on_whatsapp": bool(result.get("ok")), "error": result.get("error")}
+
+
+@frappe.whitelist(methods=["POST"])
+def unblock(conversation: str):
+	doc = _get(conversation, "write")
+	if not cint(doc.get("blocked")):
+		return True
+	if cint(doc.blocked_on_whatsapp):
+		result = _block_on_whatsapp(doc, unblock=True)
+		if not result.get("ok"):
+			frappe.throw(_("WhatsApp did not unblock the number: {0}").format(result.get("error") or ""))
+	doc.db_set(
+		{"blocked": 0, "blocked_on_whatsapp": 0, "blocked_by": None, "blocked_at": None, "block_note": None, "status": "Open"},
+		update_modified=False,
+	)
+	_block_hooks(doc, False)
+	publish(doc.name)
+	return True
+
+
 @frappe.whitelist()
 def set_status(conversation: str, status: str):
 	if status not in ("Open", "Done"):
@@ -730,6 +826,8 @@ def draft_reply(conversation: str, language: str | None = None, instruction: str
 def _new_outgoing(doc, values):
 	if not can_send(doc.whatsapp_account):
 		frappe.throw(_("Sending isn't switched on for this WhatsApp number yet (receive-only)."))
+	if cint(doc.get("blocked")):
+		frappe.throw(_("This number is blocked. Unblock it before writing to it."))
 	message = frappe.new_doc("WhatsApp Message")
 	message.update(
 		{

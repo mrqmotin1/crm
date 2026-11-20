@@ -216,6 +216,25 @@ class TestWhatsAppInbox(TestCase):
 				with self.assertRaises(frappe.PermissionError):
 					inbox.set_quick_field(name, fieldname, "x")
 
+	def test_block(self):
+		sender = number()
+		self.incoming(sender)
+		conv = self.conversation(sender)
+		# WhatsApp refuses (e.g. the sender last wrote more than 24 hours ago): the block still holds in the CRM
+		with patch.object(inbox, "_block_on_whatsapp", return_value={"ok": False, "error": "not in the last 24 hours"}):
+			out = inbox.block(conv)
+		self.assertFalse(out["on_whatsapp"])
+		self.assertTrue(inbox.is_blocked(ACCOUNT, sender))
+		row = frappe.db.get_value("CRM WhatsApp Conversation", conv, ["status", "unread", "blocked_on_whatsapp"], as_dict=True)
+		self.assertEqual((row.status, row.unread, row.blocked_on_whatsapp), ("Done", 0, 0))
+		self.incoming(sender, "again")  # kept, silently
+		row = frappe.db.get_value("CRM WhatsApp Conversation", conv, ["status", "unread", "last_message"], as_dict=True)
+		self.assertEqual((row.status, row.unread, row.last_message), ("Done", 0, "again"))
+		self.assertRaises(frappe.ValidationError, inbox._new_outgoing, frappe.get_doc("CRM WhatsApp Conversation", conv), {"message": "x"})
+		self.assertTrue(inbox.unblock(conv))  # blocked in the CRM only: nothing to undo on WhatsApp
+		self.assertFalse(inbox.is_blocked(ACCOUNT, sender))
+		self.assertEqual(frappe.db.get_value("CRM WhatsApp Conversation", conv, "status"), "Open")
+
 	def test_hooks(self):
 		sender = number()
 		self.incoming_hooks = ["crm.api.test_whatsapp_inbox.broken_hook"]

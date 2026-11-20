@@ -72,9 +72,11 @@ def validate(doc, method):
 
 	if not is_new:
 		return
-	if doc.type == "Incoming":
+	from crm.api.whatsapp_inbox import is_blocked, track_message
+
+	# a blocked sender: no lead is made, reopened or given a task for this message (whatsapp_inbox.block)
+	if doc.type == "Incoming" and not is_blocked(doc.get("whatsapp_account"), doc.get("from")):
 		run_incoming_hooks(doc)
-	from crm.api.whatsapp_inbox import track_message
 
 	doc.flags.crm_new_message = True
 	doc.flags.crm_conversation = track_message(doc)
@@ -107,7 +109,7 @@ def on_update(doc, method):
 
 	publish(doc.flags.get("crm_conversation") or doc.get(FIELD))
 	# status updates (sent, delivered, read) save the message again: notify on arrival only
-	if doc.flags.get("crm_new_message"):
+	if doc.flags.get("crm_new_message") and not doc.flags.get("crm_blocked"):
 		notify_agent(doc)
 
 

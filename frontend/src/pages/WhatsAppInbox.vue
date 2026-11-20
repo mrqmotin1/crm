@@ -105,6 +105,13 @@
                 :label="__('Not linked')"
               />
               <Badge
+                v-if="c.blocked"
+                size="sm"
+                theme="red"
+                variant="subtle"
+                :label="__('Blocked')"
+              />
+              <Badge
                 v-if="!c.owner_user"
                 size="sm"
                 theme="blue"
@@ -203,6 +210,19 @@
               :title="__('Lead details')"
               @click="showDetails = !showDetails"
             />
+            <Badge
+              v-if="conversation.data.blocked"
+              theme="red"
+              variant="subtle"
+              :label="__('Blocked')"
+            />
+            <Button
+              v-else
+              variant="ghost"
+              icon="slash"
+              :title="__('Block this number')"
+              @click="blockNumber"
+            />
             <Button
               v-if="conversation.data.status == 'Open'"
               :label="__('Done')"
@@ -275,7 +295,14 @@
         </div>
         <div class="wa-bar border-t">
           <div
-            v-if="!conversation.data.can_send"
+            v-if="conversation.data.blocked"
+            class="flex items-center justify-between gap-2 px-3 py-3 sm:px-10"
+          >
+            <span class="text-sm text-ink-gray-5">{{ blockedText }}</span>
+            <Button :label="__('Unblock')" :loading="blocking" @click="unblockNumber" />
+          </div>
+          <div
+            v-else-if="!conversation.data.can_send"
             class="px-3 py-3 text-sm text-ink-gray-5 sm:px-10"
           >
             {{ __("Receive-only: sending isn't switched on for this WhatsApp number yet.") }}
@@ -410,6 +437,7 @@ import {
   toast,
 } from 'frappe-ui'
 import { computed, reactive, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { createDialog } from '@/utils/dialogs'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
@@ -677,6 +705,66 @@ async function setHandler(handler) {
     toast.error(e.messages?.[0] || __('Could not change who answers'))
   }
   conversation.reload()
+}
+
+// Block an abusive or spam sender: WhatsApp stops delivering their messages to this number, the chat is closed and
+// apps follow up (hook crm_whatsapp_blocked, e.g. the lead goes to Junk).
+const blocking = ref(false)
+const blockedText = computed(() => {
+  const d = conversation.data || {}
+  const who = d.blocked_by_name || __('a colleague')
+  return d.blocked_on_whatsapp
+    ? __('Blocked by {0}. This number can no longer message us on WhatsApp.', [who])
+    : __(
+        'Blocked by {0} in the CRM only (WhatsApp: {1}). New messages from this number are kept silently: no unread mark, no task, no reply.',
+        [who, d.block_note || __('not blocked there')],
+      )
+})
+
+function blockNumber() {
+  createDialog({
+    title: __('Block this number?'),
+    message: __(
+      '+{0} will no longer be able to message this WhatsApp number. The chat is closed and its lead is marked as spam. You can unblock it later.',
+      [conversation.data.contact_number],
+    ),
+    size: 'sm',
+    actions: [
+      { label: __('Cancel'), onClick: ({ close }) => close() },
+      {
+        label: __('Block'),
+        variant: 'solid',
+        theme: 'red',
+        onClick: async ({ close }) => {
+          try {
+            const out = await call('crm.api.whatsapp_inbox.block', { conversation: selected.value })
+            if (out?.on_whatsapp) toast.success(__('Number blocked'))
+            else toast.warning(__('Blocked in the CRM only. WhatsApp did not block it: {0}', [out?.error || '']))
+          } catch (e) {
+            toast.error(e.messages?.[0] || __('Could not block the number'))
+          }
+          close()
+          conversation.reload()
+          conversations.reload()
+          refreshWhatsappUnread()
+        },
+      },
+    ],
+  })
+}
+
+async function unblockNumber() {
+  blocking.value = true
+  try {
+    await call('crm.api.whatsapp_inbox.unblock', { conversation: selected.value })
+    toast.success(__('Number unblocked'))
+  } catch (e) {
+    toast.error(e.messages?.[0] || __('Could not unblock the number'))
+  } finally {
+    blocking.value = false
+  }
+  conversation.reload()
+  conversations.reload()
 }
 
 async function setStatus(value) {

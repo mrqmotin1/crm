@@ -20,7 +20,14 @@
   "last_message_at",
   "column_break_last",
   "last_incoming_at",
-  "unread"
+  "unread",
+  "section_blocked",
+  "blocked",
+  "blocked_on_whatsapp",
+  "column_break_blocked",
+  "blocked_by",
+  "blocked_at",
+  "block_note"
  ],
  "fields": [
   {
@@ -118,11 +125,55 @@
    "label": "Unread",
    "read_only": 1,
    "default": "0"
+  },
+  {
+   "fieldname": "section_blocked",
+   "fieldtype": "Section Break",
+   "label": "Blocked"
+  },
+  {
+   "fieldname": "blocked",
+   "fieldtype": "Check",
+   "label": "Blocked",
+   "read_only": 1,
+   "default": "0",
+   "search_index": 1
+  },
+  {
+   "fieldname": "blocked_on_whatsapp",
+   "fieldtype": "Check",
+   "label": "Blocked on WhatsApp",
+   "read_only": 1,
+   "default": "0",
+   "description": "WhatsApp itself refuses this sender's messages. Off: blocked in the CRM only."
+  },
+  {
+   "fieldname": "column_break_blocked",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "blocked_by",
+   "fieldtype": "Link",
+   "label": "Blocked by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "blocked_at",
+   "fieldtype": "Datetime",
+   "label": "Blocked at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "block_note",
+   "fieldtype": "Small Text",
+   "label": "Block note",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "links": [],
- "modified": "2026-10-24 22:00:00.000000",
+ "modified": "2026-11-21 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM WhatsApp Conversation",
