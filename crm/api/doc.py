@@ -411,7 +411,10 @@ def get_data(
 			for field in (kanban_marker["count_field"], kanban_marker["at_field"]):
 				if field not in rows:
 					rows.append(field)
-			kanban_order_by = f"{kanban_marker['at_field']} desc" + (f", {order_by}" if order_by else "")
+			kanban_order_by = f"{kanban_marker['at_field']} desc"
+			if kanban_marker.get("pin_field"):  # cards the app keeps on top, after the marked ones
+				kanban_order_by += f", {kanban_marker['pin_field']} desc"
+			kanban_order_by += f", {order_by}" if order_by else ""
 
 		for kc in kanban_columns:
 			column_filters = {column_field: kc.get("name")}
@@ -664,7 +667,9 @@ def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
 def get_kanban_marker(doctype) -> dict | None:
 	"""Hook `crm_kanban_marker(doctype)` -> {"count_field", "at_field", "label", "tab"}: a number field (cards with
 	more than 0 are highlighted and show it as a badge), a datetime field (those cards sort first, latest on top),
-	a short label for the badge and the record tab the badge opens. Both fields must exist on the doctype."""
+	a short label for the badge and the record tab the badge opens. Both fields must exist on the doctype.
+	Optional "pin_field": another datetime field; cards that have it come next, latest on top, before the view's own
+	sort (the app shows why with one of its own card fields or labels)."""
 	meta = frappe.get_meta(doctype)
 	for method in frappe.get_hooks("crm_kanban_marker"):
 		try:
@@ -678,6 +683,7 @@ def get_kanban_marker(doctype) -> dict | None:
 				"at_field": marker["at_field"],
 				"label": marker.get("label") or "",
 				"tab": marker.get("tab") or "",
+				"pin_field": marker["pin_field"] if marker.get("pin_field") and meta.has_field(marker["pin_field"]) else None,
 			}
 	return None
 
