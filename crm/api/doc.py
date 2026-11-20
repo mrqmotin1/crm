@@ -438,8 +438,7 @@ def get_data(
 				kc["all_count"] = all_count
 				kc["count"] = len(column_data)
 
-				for d in column_data:
-					getCounts(d, doctype)
+				get_counts_bulk(column_data, doctype)
 
 			if order:
 				column_data = sorted(
@@ -648,6 +647,38 @@ def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
 			_fields.append(field)
 
 	return _fields
+
+
+def get_counts_bulk(rows, doctype):
+	"""The same counts as getCounts for many records at once: four grouped queries for a kanban column instead of
+	five per card (a board of 160 cards ran about 800 queries on every load and refresh)."""
+	names = [d.get("name") for d in rows if d.get("name")]
+	if not names:
+		return rows
+
+	def grouped(table, name_field, condition=""):
+		return dict(
+			frappe.db.sql(
+				f"""select `{name_field}`, count(*) from `tab{table}`
+				where reference_doctype = %s and `{name_field}` in %s {condition}
+				group by `{name_field}`""",
+				(doctype, tuple(names)),
+			)
+		)
+
+	emails = grouped(
+		"Communication", "reference_name", "and communication_type in ('Communication', 'Automated Message')"
+	)
+	comments = grouped("Comment", "reference_name", "and comment_type = 'Comment'")
+	tasks = grouped("CRM Task", "reference_docname")
+	notes = grouped("FCRM Note", "reference_docname")
+	for d in rows:
+		name = d.get("name")
+		d["_email_count"] = emails.get(name, 0)
+		d["_comment_count"] = comments.get(name, 0)
+		d["_task_count"] = tasks.get(name, 0)
+		d["_note_count"] = notes.get(name, 0)
+	return rows
 
 
 def getCounts(d, doctype):

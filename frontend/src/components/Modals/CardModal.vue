@@ -29,7 +29,7 @@
 // header rendered inline (LayoutHeader reads `inlineLayoutHeader`), so the status
 // flow, assignment, activities and fields behave exactly as on the full page.
 import { Dialog } from 'frappe-ui'
-import { computed, defineAsyncComponent, provide, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, provide, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -58,8 +58,18 @@ const PAGES = {
 const page = computed(() => PAGES[props.doctype].component)
 const pageProps = computed(() => ({ [PAGES[props.doctype].prop]: props.name }))
 
+// Closing must feel instant: the dialog hides at once and the browser paints that first. What follows from
+// `close` (the route change, tearing down the whole Lead/Deal page, the board refresh) is heavy and used to run
+// before anything was painted, so the pop-up seemed to hang. It now runs right after the first painted frame.
+let alive = true
+onBeforeUnmount(() => (alive = false))
 watch(show, (open) => {
-  if (!open) emit('close')
+  if (open) return
+  requestAnimationFrame(() =>
+    setTimeout(() => {
+      if (alive) emit('close') // not if another card was opened meanwhile (this one is already gone)
+    }, 0),
+  )
 })
 
 function openDetails() {
