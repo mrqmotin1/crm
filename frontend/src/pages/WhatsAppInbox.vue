@@ -236,20 +236,44 @@
                   </Dropdown>
                 </template>
               </FileUploader>
-              <Button
-                v-if="conversation.data.can_draft"
-                variant="ghost"
-                :loading="drafting"
-                :title="__('Draft a reply with Mona (you review and send it)')"
-                @click="draftReply"
-              >
-                <template #icon><span aria-hidden="true">✨</span></template>
-              </Button>
+              <template v-if="conversation.data.can_draft">
+                <Button
+                  variant="ghost"
+                  :loading="drafting"
+                  :title="
+                    content.trim()
+                      ? __('Mona writes the message from what you typed (a draft or an instruction). You review and send it.')
+                      : __('Draft a reply with Mona (you review and send it)')
+                  "
+                  @click="draftReply()"
+                >
+                  <template #icon><span aria-hidden="true">✨</span></template>
+                </Button>
+                <Dropdown :options="languageOptions">
+                  <Button
+                    variant="ghost"
+                    icon="globe"
+                    :disabled="drafting"
+                    :title="__('Mona writes it in the language you pick')"
+                  />
+                </Dropdown>
+                <Button
+                  v-if="beforeMona !== null"
+                  variant="ghost"
+                  icon="rotate-ccw"
+                  :title="__('Bring back what you typed')"
+                  @click="undoDraft"
+                />
+              </template>
               <Textarea
                 v-model="content"
                 class="min-h-8 w-full"
                 :rows="rows"
-                :placeholder="__('Type your message here...')"
+                :placeholder="
+                  conversation.data.can_draft
+                    ? __('Type your message, or a draft or instruction for Mona and press ✨')
+                    : __('Type your message here...')
+                "
                 @focus="rows = 4"
                 @blur="rows = content ? 4 : 1"
                 @keydown.enter.exact.prevent="sendText"
@@ -327,6 +351,7 @@ const sending = ref(false)
 const creatingLead = ref(false)
 const showTemplates = ref(false)
 const drafting = ref(false)
+const beforeMona = ref(null) // what the rep had typed before Mona replaced it, for Undo
 const threadEl = ref(null)
 
 const conversations = createResource({
@@ -369,6 +394,7 @@ watch(
   selected,
   (name) => {
     reply.value = {}
+    beforeMona.value = null
     router.replace({ query: name ? { c: name } : {} })
     load()
   },
@@ -425,6 +451,7 @@ function sendText() {
   const text = content.value.trim()
   if (!text) return
   content.value = ''
+  beforeMona.value = null
   const reply_to = reply.value?.name || ''
   reply.value = {}
   send('send', { message: text, reply_to })
@@ -460,13 +487,32 @@ function uploadOptions(openFileSelector) {
   ]
 }
 
-async function draftReply() {
+// Mona writes the reply. Text already in the box goes to her as the rep's draft or instruction; a language picked
+// from the menu is the language she writes in (none: the customer's language, or the one the instruction names).
+const draftLanguages = ['English', 'Bangla', 'Banglish', 'Arabic', 'Hindi', 'Urdu']
+const languageOptions = [
+  { label: __("Customer's language"), onClick: () => draftReply() },
+  ...draftLanguages.map((language) => ({
+    label: __(language),
+    onClick: () => draftReply(language),
+  })),
+]
+
+async function draftReply(language) {
+  if (drafting.value) return
+  const typed = content.value.trim()
+  const conversationName = selected.value
   drafting.value = true
   try {
     const out = await call('crm.api.whatsapp_inbox.draft_reply', {
-      conversation: selected.value,
+      conversation: conversationName,
+      language: language || null,
+      instruction: typed || null,
     })
+    // the rep moved to another chat, or kept typing, while Mona was writing: leave their box alone
+    if (selected.value !== conversationName || content.value.trim() !== typed) return
     if (out?.reply) {
+      beforeMona.value = typed ? content.value : null
       content.value = out.reply
       rows.value = 4
     }
@@ -475,6 +521,11 @@ async function draftReply() {
   } finally {
     drafting.value = false
   }
+}
+
+function undoDraft() {
+  content.value = beforeMona.value
+  beforeMona.value = null
 }
 
 function sendTemplate(template) {

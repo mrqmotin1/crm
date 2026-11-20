@@ -485,14 +485,19 @@ def create_lead(conversation: str):
 
 
 @frappe.whitelist(methods=["POST"])
-def draft_reply(conversation: str, language: str | None = None):
-	"""A draft for the composer from the app that registered hook `crm_whatsapp_draft_reply(conversation, language)`
-	(e.g. an AI assistant). It only returns text; the rep edits and sends it."""
+def draft_reply(conversation: str, language: str | None = None, instruction: str | None = None):
+	"""A draft for the composer from the app that registered hook
+	`crm_whatsapp_draft_reply(conversation, language, instruction)` (e.g. an AI assistant). `instruction` is what the
+	rep typed in the reply box: a rough draft to rewrite, or a note on what to say. `language` is the language the rep
+	picked (none: the assistant decides). It only returns text; the rep edits and sends it."""
 	_get(conversation, "write")
 	methods = frappe.get_hooks("crm_whatsapp_draft_reply")
 	if not methods:
 		frappe.throw(_("No draft assistant is installed."))
-	out = frappe.get_attr(methods[-1])(conversation, language=language)
+	kwargs = {"language": (language or "").strip()[:40] or None}
+	if (instruction or "").strip():
+		kwargs["instruction"] = instruction.strip()[:4000]
+	out = frappe.get_attr(methods[-1])(conversation, **kwargs)
 	return {"reply": (out or {}).get("reply") or ""}
 
 

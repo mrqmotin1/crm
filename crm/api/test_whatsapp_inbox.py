@@ -178,6 +178,10 @@ class TestWhatsAppInbox(TestCase):
 		):
 			self.assertTrue(inbox.get_conversation(name).can_draft)
 			self.assertEqual(inbox.draft_reply(name)["reply"], f"draft for {name}")
+			self.assertEqual(
+				inbox.draft_reply(name, language="Arabic", instruction="  say hello ")["reply"],
+				f"draft for {name} in Arabic from say hello",
+			)
 		frappe.db.set_value("CRM WhatsApp Conversation", name, "owner_user", OTHER)
 		frappe.set_user(REP)
 		with self.assertRaises(frappe.PermissionError):
@@ -209,5 +213,6 @@ def linking_hook(doc):
 	return "CRM Lead", frappe.flags.test_hook_lead
 
 
-def fake_draft(conversation, language=None):
-	return {"reply": f"draft for {conversation}"}
+def fake_draft(conversation, language=None, instruction=None):
+	extra = (f" in {language}" if language else "") + (f" from {instruction}" if instruction else "")
+	return {"reply": f"draft for {conversation}{extra}"}
