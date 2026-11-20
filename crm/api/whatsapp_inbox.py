@@ -640,7 +640,19 @@ def mark_read(conversation: str):
 		doc.db_set("unread", 0, update_modified=False)
 		unread_changed(doc)
 		publish(doc.name)
+	elif _marker_left(doc.reference_doctype, doc.reference_name):
+		unread_changed(doc)  # the chat is read but its record still shows unread: put the marker right
 	return True
+
+
+def _marker_left(doctype, name) -> bool:
+	"""The record's kanban marker (hook crm_kanban_marker) still counts unread messages."""
+	if not doctype or not name:
+		return False
+	from crm.api.doc import get_kanban_marker
+
+	field = (get_kanban_marker(doctype) or {}).get("count_field")
+	return bool(field and cint(frappe.db.get_value(doctype, name, field)))
 
 
 @frappe.whitelist()
@@ -660,6 +672,13 @@ def mark_record_read(doctype: str, name: str):
 		doc.db_set("unread", 0, update_modified=False)
 		unread_changed(doc)
 		publish(doc.name)
+	if not names and _marker_left(doctype, name):
+		# every chat is read but the record still shows unread: put the marker right
+		rest = frappe.get_all(
+			"CRM WhatsApp Conversation", filters={"reference_doctype": doctype, "reference_name": name}, pluck="name", limit=1
+		)
+		if rest:
+			unread_changed(frappe.get_doc("CRM WhatsApp Conversation", rest[0]))
 	return bool(names)
 
 

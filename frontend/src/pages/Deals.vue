@@ -413,7 +413,8 @@ function closeCard() {
 watch(
   () => route.query.card,
   (card, previous) => {
-    if (previous && !card) deals.value?.reload?.()
+    // after the closed card is off the screen and torn down, not in the same burst of work
+    if (previous && !card) setTimeout(() => !route.query.card && deals.value?.reload?.(), 350)
   },
 )
 const loadMore = ref(1)

@@ -23,11 +23,12 @@ const session = sessionStore()
 provide('session', session)
 
 // Remount the page when its path or query changes, but not for the URL hash (the
-// Lead/Deal tab manager watches it) or `card` (the kanban card modal): keying on
-// fullPath rebuilt the whole page, and the board behind an open card, on every tab click.
+// Lead/Deal tab manager watches it), `card` (the kanban card modal) or `c` (the chat open
+// in the WhatsApp inbox): keying on fullPath rebuilt the whole page, and the board behind
+// an open card, on every tab click; keying on `c` rebuilt the inbox on every chat click.
 const route = useRoute()
 const routeKey = computed(() => {
-  const { card, ...query } = route.query
+  const { card, c, ...query } = route.query
   return route.path + '?' + new URLSearchParams(query).toString()
 })
 

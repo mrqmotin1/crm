@@ -29,7 +29,7 @@
 // header rendered inline (LayoutHeader reads `inlineLayoutHeader`), so the status
 // flow, assignment, activities and fields behave exactly as on the full page.
 import { Dialog } from 'frappe-ui'
-import { computed, defineAsyncComponent, onBeforeUnmount, provide, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -58,19 +58,37 @@ const PAGES = {
 const page = computed(() => PAGES[props.doctype].component)
 const pageProps = computed(() => ({ [PAGES[props.doctype].prop]: props.name }))
 
-// Closing must feel instant: the dialog hides at once and the browser paints that first. What follows from
-// `close` (the route change, tearing down the whole Lead/Deal page, the board refresh) is heavy and used to run
-// before anything was painted, so the pop-up seemed to hang. It now runs right after the first painted frame.
+// Closing must be instant. The dialog's own fade-out runs while the whole Lead/Deal page inside it is torn down;
+// on a slower computer that work freezes the fade half-way for seconds (a ghost of the card over the board). So the
+// dialog is taken off the screen at once, without the fade (`crm-card-closing` on <body>, styled below), the
+// browser paints the board, and only then `close` runs (route change, teardown, board refresh).
+const CLOSING = 'crm-card-closing'
 let alive = true
-onBeforeUnmount(() => (alive = false))
-watch(show, (open) => {
-  if (open) return
-  requestAnimationFrame(() =>
-    setTimeout(() => {
-      if (alive) emit('close') // not if another card was opened meanwhile (this one is already gone)
-    }, 0),
-  )
+let safety = null
+function shown() {
+  clearTimeout(safety)
+  document.body.classList.remove(CLOSING)
+}
+onMounted(shown) // a card opened right after another was closed must show
+onBeforeUnmount(() => {
+  alive = false
+  clearTimeout(safety)
+  safety = setTimeout(shown, 100) // the dialog's elements are removed with this component
 })
+watch(
+  show,
+  (open) => {
+    if (open) return
+    document.body.classList.add(CLOSING)
+    safety = setTimeout(shown, 3000) // never leave dialogs hidden if something goes wrong below
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (alive) emit('close') // not if another card was opened meanwhile (this one is already gone)
+      }),
+    )
+  },
+  { flush: 'sync' },
+)
 
 function openDetails() {
   const p = PAGES[props.doctype]
@@ -79,6 +97,11 @@ function openDetails() {
 </script>
 
 <style>
+/* A closing card disappears at once (see the script): no fade, nothing left over the board. */
+body.crm-card-closing .dialog-overlay,
+body.crm-card-closing .dialog-scroll-container {
+  display: none !important;
+}
 /* The page's body is `h-full`; inside the modal it shares the column with its header. */
 .crm-card-modal-page > .h-full {
   flex: 1 1 0%;

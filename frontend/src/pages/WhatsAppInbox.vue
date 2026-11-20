@@ -284,7 +284,11 @@
             />
           </div>
         </div>
-        <div ref="threadEl" class="wa-wallpaper flex-1 overflow-y-auto px-4 py-4 sm:px-12">
+        <div
+          ref="threadEl"
+          class="wa-wallpaper flex-1 overflow-y-auto px-4 py-4 transition-opacity duration-150 sm:px-12"
+          :class="switching ? 'opacity-50' : ''"
+        >
           <WhatsAppArea
             v-if="thread.data?.length"
             chat
@@ -476,9 +480,23 @@ const conversations = createResource({
   auto: true,
 })
 
+// Chats already opened in this visit are kept, so going back to one shows it at once while it refreshes quietly.
+// A chat opened for the first time keeps the previous one on screen, slightly dimmed, until its data arrives:
+// nothing blanks or jumps. An answer for a chat that is no longer the selected one is asked again.
+const seen = new Map()
+const switching = ref(false)
+function remember(name, part, data) {
+  seen.set(name, { ...(seen.get(name) || {}), [part]: data })
+  if (seen.size > 40) seen.delete(seen.keys().next().value)
+}
+
 const conversation = createResource({
   url: 'crm.api.whatsapp_inbox.get_conversation',
   makeParams: () => ({ conversation: selected.value }),
+  onSuccess: (data) => {
+    if (data?.name !== selected.value) return selected.value && conversation.reload()
+    remember(data.name, 'conversation', data)
+  },
 })
 
 const thread = createResource({
@@ -486,7 +504,14 @@ const thread = createResource({
   makeParams: () => ({ conversation: selected.value }),
   transform: (data) =>
     data.sort((a, b) => new Date(a.creation) - new Date(b.creation)),
-  onSuccess: () => nextTick(scrollToEnd),
+  onSuccess: (data) => {
+    const asked = thread.params?.conversation
+    if (asked && asked !== selected.value) return selected.value && thread.reload()
+    if (asked) remember(asked, 'thread', data)
+    switching.value = false
+    nextTick(scrollToEnd)
+  },
+  onError: () => (switching.value = false),
 })
 
 watch([scope, search, unreadOnly, status], () => conversations.reload())
@@ -547,6 +572,15 @@ async function saveQuick(f) {
 
 function load() {
   if (!selected.value) return
+  const kept = seen.get(selected.value)
+  if (kept?.conversation && kept?.thread) {
+    conversation.setData(kept.conversation)
+    thread.setData(kept.thread)
+    switching.value = false
+    nextTick(scrollToEnd)
+  } else {
+    switching.value = Boolean(conversation.data)
+  }
   conversation.reload()
   thread.reload()
   call('crm.api.whatsapp_inbox.mark_read', { conversation: selected.value }).then(
@@ -557,12 +591,22 @@ function load() {
 watch(
   selected,
   (name) => {
+    // the page is no longer rebuilt per chat: nothing typed or picked for one chat may carry over to the next
     reply.value = {}
     beforeMona.value = null
-    router.replace({ query: name ? { c: name } : {} })
+    content.value = ''
+    showTemplates.value = false
+    if ((route.query.c || null) !== (name || null)) router.replace({ query: name ? { c: name } : {} })
     load()
   },
   { immediate: true },
+)
+// Back / Forward, or a link to another chat while the inbox is open
+watch(
+  () => route.query.c,
+  (c) => {
+    if (route.name === 'WhatsApp' && (c || null) !== (selected.value || null)) selected.value = c || null
+  },
 )
 
 function open(name) {
