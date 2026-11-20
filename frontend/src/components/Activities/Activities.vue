@@ -496,7 +496,7 @@ import { useTimelinePreferences } from '@/composables/useTimelinePreferences'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { useDocument } from '@/data/document'
 import { useTelemetry } from 'frappe-ui/frappe'
-import { Button, createResource, toast } from 'frappe-ui'
+import { Button, call, createResource, toast } from 'frappe-ui'
 import { useElementVisibility } from '@vueuse/core'
 import {
   ref,
@@ -589,6 +589,19 @@ onBeforeUnmount(() => {
   $socket.off('docinfo_update', handleDocinfoUpdate)
   $socket.emit('doc_unsubscribe', props.doctype, props.docname)
 })
+
+// Looking at the WhatsApp tab reads the record's chats, as opening them in the inbox does (unread markers clear).
+watch(
+  [title, () => whatsappMessages.data],
+  ([tab, messages]) => {
+    if (tab !== 'WhatsApp' || !messages?.length) return
+    call('crm.api.whatsapp_inbox.mark_record_read', {
+      doctype: props.doctype,
+      name: props.docname,
+    }).catch(() => {})
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   $socket.emit('doc_subscribe', props.doctype, props.docname)

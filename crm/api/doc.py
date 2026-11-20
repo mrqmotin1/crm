@@ -275,6 +275,7 @@ def get_data(
 	columns = frappe.parse_json(columns or "[]")
 	kanban_fields = frappe.parse_json(kanban_fields or "[]")
 	kanban_columns = frappe.parse_json(kanban_columns or "[]")
+	kanban_marker = None
 
 	custom_view_name = view.get("custom_view_name") if view else None
 	view_type = view.get("view_type") if view else None
@@ -402,6 +403,16 @@ def get_data(
 			if field not in rows:
 				rows.append(field)
 
+		# An app can mark cards that need attention (hook `crm_kanban_marker`, e.g. unread WhatsApp): they come first
+		# in their column, newest first, and the board highlights them.
+		kanban_marker = get_kanban_marker(doctype)
+		kanban_order_by = order_by
+		if kanban_marker:
+			for field in (kanban_marker["count_field"], kanban_marker["at_field"]):
+				if field not in rows:
+					rows.append(field)
+			kanban_order_by = f"{kanban_marker['at_field']} desc" + (f", {order_by}" if order_by else "")
+
 		for kc in kanban_columns:
 			column_filters = {column_field: kc.get("name")}
 			# Cards follow the view's sort. A saved manual card order (older kanban versions stored one for every
@@ -422,7 +433,7 @@ def get_data(
 						doctype,
 						fields=rows,
 						filters=convert_filter_to_tuple(doctype, column_filters),
-						order_by=order_by,
+						order_by=kanban_order_by,
 						page_length=column_page_length,
 					)
 
@@ -529,6 +540,7 @@ def get_data(
 		"title_field": title_field,
 		"kanban_columns": kanban_columns,
 		"kanban_fields": kanban_fields,
+		"kanban_marker": kanban_marker,
 		"group_by_field": group_by_field,
 		"page_length": page_length,
 		"page_length_count": page_length_count,
@@ -647,6 +659,27 @@ def get_fields(doctype: str, allow_all_fieldtypes: bool = False):
 			_fields.append(field)
 
 	return _fields
+
+
+def get_kanban_marker(doctype) -> dict | None:
+	"""Hook `crm_kanban_marker(doctype)` -> {"count_field", "at_field", "label", "tab"}: a number field (cards with
+	more than 0 are highlighted and show it as a badge), a datetime field (those cards sort first, latest on top),
+	a short label for the badge and the record tab the badge opens. Both fields must exist on the doctype."""
+	meta = frappe.get_meta(doctype)
+	for method in frappe.get_hooks("crm_kanban_marker"):
+		try:
+			marker = frappe.get_attr(method)(doctype)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"CRM kanban: hook {method} failed")
+			continue
+		if marker and meta.has_field(marker.get("count_field")) and meta.has_field(marker.get("at_field")):
+			return {
+				"count_field": marker["count_field"],
+				"at_field": marker["at_field"],
+				"label": marker.get("label") or "",
+				"tab": marker.get("tab") or "",
+			}
+	return None
 
 
 def get_counts_bulk(rows, doctype):

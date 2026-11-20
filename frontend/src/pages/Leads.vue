@@ -39,6 +39,7 @@
       }),
       onNewClick: (column) => onNewClick(column),
       onCardClick: (row) => openCard(row.name),
+      onMarkerClick: (row, marker) => openCard(row.name, marker.tab),
       background: boardBackground,
     }"
     @update="(data) => viewControls.updateKanbanSettings(data)"
@@ -355,6 +356,7 @@ import { callEnabled } from '@/composables/telephony'
 import { useBroadcast } from '@/composables/useBroadcast'
 import { formatDate, timeAgo, website, formatTime, dueBadge, ageBadge } from '@/utils'
 import CardModal from '@/components/Modals/CardModal.vue'
+import { useKanbanRefresh } from '@/composables/kanbanRefresh'
 import QuickLabelsDialog from '@/components/Labels/QuickLabelsDialog.vue'
 import { viewsStore } from '@/stores/views'
 import LabelChips from '@/components/Labels/LabelChips.vue'
@@ -391,9 +393,12 @@ const defaults = reactive({})
 const leads = ref({})
 
 // Kanban cards open in place (CardModal) via ?card=; Back or close removes it.
-function openCard(name) {
-  router.push({ query: { ...route.query, card: name } })
+function openCard(name, tab) {
+  router.push({ query: { ...route.query, card: name }, hash: tab ? '#' + tab : '' })
 }
+
+// a card changed outside the board (e.g. a WhatsApp message came in or was read): refresh quietly
+useKanbanRefresh('CRM Lead', leads)
 
 // Trello-style board: background from the kanban view, quick actions on card hover.
 const { getView: getBoardView } = viewsStore()

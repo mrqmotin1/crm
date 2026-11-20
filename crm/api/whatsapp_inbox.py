@@ -173,10 +173,33 @@ def track_message(doc, at=None) -> str | None:
 				"owner_user": _owner_of(doc.reference_doctype, doc.reference_name),
 			}
 		)
+	before = (conversation.reference_doctype, conversation.reference_name, cint(conversation.unread))
 	conversation.db_set(values, update_modified=False)
+	after = (conversation.reference_doctype, conversation.reference_name, cint(conversation.unread))
+	if after != before:
+		unread_changed(conversation, before[:2] if before[:2] != after[:2] else None)
 	if has_field():
 		doc.set(FIELD, conversation.name)
 	return conversation.name
+
+
+def unread_changed(conversation, previous_reference=None):
+	"""A conversation's unread count changed (a message came in, someone read or answered it, it was marked Done or
+	moved to another record). Hook `crm_whatsapp_unread_changed(conversation, previous_reference)` lets an app keep
+	its own marker on the linked record; open kanban boards are told to refresh that record's card."""
+	for method in frappe.get_hooks("crm_whatsapp_unread_changed"):
+		frappe.db.savepoint("crm_whatsapp_unread_changed")
+		try:
+			frappe.get_attr(method)(conversation, previous_reference=previous_reference)
+		except Exception:
+			frappe.db.rollback(save_point="crm_whatsapp_unread_changed")
+			frappe.log_error(frappe.get_traceback(), f"CRM WhatsApp: hook {method} failed")
+	references = {(conversation.get("reference_doctype"), conversation.get("reference_name"))}
+	if previous_reference:
+		references.add(tuple(previous_reference))
+	for doctype, name in references:
+		if doctype and name:
+			frappe.publish_realtime("crm_kanban_refresh", {"doctype": doctype, "name": name}, after_commit=True)
 
 
 def publish(conversation: str | None):
@@ -414,8 +437,29 @@ def mark_read(conversation: str):
 	doc = _get(conversation)
 	if doc.unread:
 		doc.db_set("unread", 0, update_modified=False)
+		unread_changed(doc)
 		publish(doc.name)
 	return True
+
+
+@frappe.whitelist()
+def mark_record_read(doctype: str, name: str):
+	"""Someone opened the WhatsApp tab of a lead, deal or contact: its conversations are read, as in the inbox."""
+	if not frappe.has_permission(doctype, "read", doc=name):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if not frappe.db.exists("DocType", "CRM WhatsApp Conversation"):
+		return False
+	names = frappe.get_all(
+		"CRM WhatsApp Conversation",
+		filters={"reference_doctype": doctype, "reference_name": name, "unread": (">", 0)},
+		pluck="name",
+	)
+	for conversation in names:
+		doc = frappe.get_doc("CRM WhatsApp Conversation", conversation)
+		doc.db_set("unread", 0, update_modified=False)
+		unread_changed(doc)
+		publish(doc.name)
+	return bool(names)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -435,12 +479,16 @@ def set_status(conversation: str, status: str):
 	if status not in ("Open", "Done"):
 		frappe.throw(_("Unknown status {0}").format(status))
 	doc = _get(conversation)
+	had_unread = cint(doc.unread)
 	doc.db_set({"status": status, "unread": 0 if status == "Done" else doc.unread}, update_modified=False)
+	if had_unread != cint(doc.unread):
+		unread_changed(doc)
 	publish(doc.name)
 	return True
 
 
 def _relink(doc, reference_doctype, reference_name):
+	previous = (doc.reference_doctype, doc.reference_name)
 	doc.db_set(
 		{
 			"reference_doctype": reference_doctype,
@@ -454,6 +502,8 @@ def _relink(doc, reference_doctype, reference_name):
 			f"""update `tabWhatsApp Message` set reference_doctype=%s, reference_name=%s where `{FIELD}`=%s""",
 			(reference_doctype, reference_name, doc.name),
 		)
+	if previous != (reference_doctype, reference_name):
+		unread_changed(doc, previous)
 	publish(doc.name)
 
 

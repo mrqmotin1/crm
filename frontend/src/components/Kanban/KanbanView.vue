@@ -100,7 +100,8 @@
                         ? 'router-link'
                         : 'div'
                   "
-                  class="group relative px-2.5 py-2 rounded-lg bg-surface-base text-base flex flex-col text-ink-gray-9 shadow-[0_1px_1px_#091e4240,0_0_1px_#091e424f] outline outline-2 outline-transparent hover:outline-blue-500 transition-[outline-color]"
+                  class="group relative px-2.5 py-2 rounded-lg text-base flex flex-col text-ink-gray-9 shadow-[0_1px_1px_#091e4240,0_0_1px_#091e424f] outline outline-2 outline-transparent hover:outline-blue-500 transition-[outline-color]"
+                  :class="markerCount(fields) ? 'kanban-marked' : 'bg-surface-base'"
                   :data-name="fields.name"
                   v-bind="
                     options.onCardClick
@@ -128,6 +129,18 @@
                   >
                     <slot name="hover-actions" v-bind="{ itemName: fields.name }" />
                   </div>
+                  <!-- a card an app marked (hook crm_kanban_marker, e.g. unread WhatsApp): badge with the count -->
+                  <button
+                    v-if="markerCount(fields)"
+                    type="button"
+                    class="kanban-marker-badge mb-1.5 flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                    :title="__('Open {0}', [marker.label || __('messages')])"
+                    @click.stop.prevent="options.onMarkerClick?.(fields, marker)"
+                  >
+                    <span class="size-1.5 rounded-full bg-current" />
+                    {{ markerCount(fields) }} {{ __('new') }}
+                    <span v-if="marker.label">· {{ marker.label }}</span>
+                  </button>
                   <slot
                     name="title"
                     v-bind="{ fields, titleField, itemName: fields.name }"
@@ -288,6 +301,12 @@ watch(
   { flush: 'pre' },
 )
 
+// Cards an app marked as needing attention (hook crm_kanban_marker): the server sorts them first.
+const marker = computed(() => kanban.value?.data?.kanban_marker || null)
+function markerCount(card) {
+  return marker.value ? Number(card[marker.value.count_field]) || 0 : 0
+}
+
 const titleField = computed(() => {
   return kanban.value?.data?.title_field
 })
@@ -372,3 +391,20 @@ function updateColumn(d, fetchNewColumns = false) {
   emit('update', data)
 }
 </script>
+
+<style>
+.kanban-marked {
+  background: #e7fce3;
+  box-shadow:
+    inset 4px 0 0 #25d366,
+    0 1px 1px #091e4240,
+    0 0 1px #091e424f;
+}
+.kanban-marker-badge {
+  background: #25d366;
+  color: #fff;
+}
+[data-theme='dark'] .kanban-marked {
+  background: #12372a;
+}
+</style>
