@@ -1,12 +1,13 @@
 <template>
   <div
+    ref="boardEl"
     class="flex overflow-x-auto h-full"
     :style="boardBackgroundStyle(options.background)"
   >
     <Draggable
       v-if="columns"
       :list="columns"
-      item-key="column"
+      :item-key="columnKey"
       :delay="isTouchScreenDevice() ? 200 : 0"
       class="flex sm:mx-2.5 mx-2 pb-3.5"
       @end="updateColumn"
@@ -77,7 +78,10 @@
               />
             </div>
           </div>
-          <div class="overflow-y-auto flex flex-col gap-2 h-full">
+          <div
+            class="overflow-y-auto flex flex-col gap-2 h-full"
+            :data-column-scroll="column.column.name"
+          >
             <Draggable
               :list="column.data"
               group="fields"
@@ -225,7 +229,7 @@ import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import { isTouchScreenDevice, colors, parseColor } from '@/utils'
 import Draggable from 'vuedraggable'
 import { Combobox, Dropdown, Popover } from 'frappe-ui'
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { boardBackgroundStyle } from '@/utils/boardBackground'
 
@@ -253,6 +257,36 @@ const props = defineProps({
 const emit = defineEmits(['update', 'loadMore'])
 
 const kanban = defineModel({ type: Object })
+
+// A reload (closing a card, a card moved, load more) brings new column objects. Keyed on the object, every column
+// was rebuilt and scrolled back to its top; keyed on the column's name it is patched in place.
+function columnKey(column) {
+  return column.column?.name
+}
+
+// Belt and braces: keep each column's scroll position (and the board's sideways one) across a data reload.
+const boardEl = ref(null)
+watch(
+  () => kanban.value?.data,
+  () => {
+    const board = boardEl.value
+    if (!board) return
+    const left = board.scrollLeft
+    const tops = {}
+    board.querySelectorAll('[data-column-scroll]').forEach((el) => {
+      if (el.scrollTop) tops[el.dataset.columnScroll] = el.scrollTop
+    })
+    nextTick(() => {
+      if (!boardEl.value) return
+      boardEl.value.querySelectorAll('[data-column-scroll]').forEach((el) => {
+        const top = tops[el.dataset.columnScroll]
+        if (top && Math.abs(el.scrollTop - top) > 1) el.scrollTop = top
+      })
+      if (left && Math.abs(boardEl.value.scrollLeft - left) > 1) boardEl.value.scrollLeft = left
+    })
+  },
+  { flush: 'pre' },
+)
 
 const titleField = computed(() => {
   return kanban.value?.data?.title_field
