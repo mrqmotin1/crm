@@ -54,10 +54,16 @@
           <div
             v-for="c in conversations.data || []"
             :key="c.name"
-            class="flex cursor-pointer flex-col gap-1 border-b px-3 py-2.5 hover:bg-surface-gray-1"
+            class="flex cursor-pointer items-start gap-3 border-b px-3 py-2.5 hover:bg-surface-gray-1"
             :class="selected == c.name ? 'bg-surface-gray-2' : ''"
             @click="open(c.name)"
           >
+            <Avatar
+              size="2xl"
+              class="mt-0.5 shrink-0"
+              :label="c.reference_title || c.profile_name || '#'"
+            />
+            <div class="flex min-w-0 flex-1 flex-col gap-1">
             <div class="flex items-center justify-between gap-2">
               <div
                 class="truncate text-base"
@@ -65,7 +71,10 @@
               >
                 {{ c.reference_title || c.profile_name || '+' + c.contact_number }}
               </div>
-              <div class="shrink-0 text-xs text-ink-gray-5">
+              <div
+                class="shrink-0 text-xs"
+                :class="c.unread ? 'font-medium text-ink-green-5' : 'text-ink-gray-5'"
+              >
                 {{ c.last_message_at ? shortTime(c.last_message_at) : '' }}
               </div>
             </div>
@@ -106,6 +115,7 @@
                 {{ __('on {0}', [c.account_label]) }}
               </span>
             </div>
+            </div>
           </div>
           <div
             v-if="conversations.data && !conversations.data.length"
@@ -117,14 +127,21 @@
       </div>
 
       <!-- thread -->
-      <div v-if="selected && conversation.data" class="flex flex-1 flex-col overflow-hidden">
-        <div class="flex items-center justify-between gap-2 border-b px-3 py-2 sm:px-5">
+      <div v-if="selected && conversation.data" class="wa-pane flex flex-1 flex-col overflow-hidden">
+        <div class="wa-bar flex items-center justify-between gap-2 border-b px-3 py-2 sm:px-5">
           <div class="flex min-w-0 items-center gap-2">
             <Button
               v-if="isMobileView"
               variant="ghost"
               icon="arrow-left"
               @click="selected = null"
+            />
+            <Avatar
+              size="2xl"
+              class="shrink-0"
+              :label="
+                conversation.data.reference?.title || conversation.data.profile_name || '#'
+              "
             />
             <div class="min-w-0">
               <div class="truncate text-lg font-medium text-ink-gray-9">
@@ -188,15 +205,16 @@
             <Button v-else :label="__('Reopen')" @click="setStatus('Open')" />
           </div>
         </div>
-        <div ref="threadEl" class="flex-1 overflow-y-auto px-3 py-4 sm:px-10">
+        <div ref="threadEl" class="wa-wallpaper flex-1 overflow-y-auto px-4 py-4 sm:px-12">
           <WhatsAppArea
             v-if="thread.data?.length"
+            chat
             v-model="thread"
             v-model:reply="reply"
             :messages="thread.data"
           />
         </div>
-        <div class="border-t">
+        <div class="wa-bar border-t">
           <div
             v-if="!conversation.data.can_send"
             class="px-3 py-3 text-sm text-ink-gray-5 sm:px-10"
@@ -267,7 +285,8 @@
               </template>
               <Textarea
                 v-model="content"
-                class="min-h-8 w-full"
+                variant="outline"
+                class="wa-input min-h-8 w-full"
                 :rows="rows"
                 :placeholder="
                   conversation.data.can_draft
@@ -280,7 +299,10 @@
               />
               <Button
                 variant="solid"
+                theme="green"
+                class="!rounded-full"
                 icon="send"
+                :title="__('Send')"
                 :loading="sending"
                 :disabled="!content.trim()"
                 @click="sendText"
@@ -315,6 +337,7 @@ import { refreshWhatsappUnread } from '@/composables/whatsapp'
 import { globalStore } from '@/stores/global'
 import { formatDate, timeAgo } from '@/utils'
 import {
+  Avatar,
   Badge,
   Breadcrumbs,
   Button,
@@ -582,3 +605,32 @@ function onInbox(data) {
 onMounted(() => $socket.on('whatsapp_inbox', onInbox))
 onBeforeUnmount(() => $socket.off('whatsapp_inbox', onInbox))
 </script>
+
+<style>
+/* WhatsApp's look for the open chat: beige wallpaper, grey top and bottom bars, a rounded white message box */
+.wa-pane {
+  --wa-wall: #efeae2;
+  --wa-dot: rgba(17, 27, 33, 0.045);
+  --wa-bar: #f0f2f5;
+}
+[data-theme='dark'] .wa-pane {
+  --wa-wall: #0b141a;
+  --wa-dot: rgba(255, 255, 255, 0.035);
+  --wa-bar: #202c33;
+}
+.wa-pane .wa-wallpaper {
+  background-color: var(--wa-wall);
+  background-image: radial-gradient(var(--wa-dot) 1.5px, transparent 1.5px),
+    radial-gradient(var(--wa-dot) 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
+  background-position: 0 0, 14px 14px;
+}
+.wa-pane .wa-bar {
+  background: var(--wa-bar);
+}
+.wa-pane .wa-input textarea {
+  border-radius: 1.25rem;
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
+</style>

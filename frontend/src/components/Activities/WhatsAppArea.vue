@@ -1,21 +1,34 @@
 <!-- eslint-disable vue/no-v-html -->
 <template>
-  <div>
+  <div :class="chat ? 'wa-chat' : ''">
+    <template v-for="(whatsapp, index) in messages" :key="whatsapp.name">
+    <div v-if="chat && newDay(index)" class="mb-3 mt-1 flex justify-center">
+      <span class="wa-chip rounded-md px-3 py-1 text-xs shadow-sm">
+        {{ dayLabel(whatsapp.creation) }}
+      </span>
+    </div>
     <div
-      v-for="whatsapp in messages"
-      :key="whatsapp.name"
       class="activity group flex gap-2"
       :class="[
         whatsapp.type == 'Outgoing' ? 'flex-row-reverse' : '',
-        whatsapp.reaction ? 'mb-7' : 'mb-3',
+        whatsapp.reaction ? 'mb-7' : chat ? (sameSender(index + 1) ? 'mb-0.5' : 'mb-2.5') : 'mb-3',
       ]"
     >
       <div
         :id="whatsapp.name"
-        class="group/message relative max-w-[90%] rounded-md bg-surface-gray-1 text-ink-gray-9 p-1.5 pl-2 text-base shadow-sm"
+        class="group/message relative text-base shadow-sm"
+        :class="
+          chat
+            ? [
+                'wa-bubble max-w-[85%] rounded-lg px-2 pb-1 pt-1.5 sm:max-w-[65%]',
+                whatsapp.type == 'Outgoing' ? 'wa-out' : 'wa-in',
+                sameSender(index) && !newDay(index) ? '' : 'wa-tail',
+              ]
+            : 'max-w-[90%] rounded-md bg-surface-gray-1 p-1.5 pl-2 text-ink-gray-9'
+        "
       >
         <Badge
-          v-if="whatsapp.status == 'failed'"
+          v-if="whatsapp.status == 'failed' && !chat"
           theme="red"
           :label="whatsapp.status"
           class="absolute -top-2 right-0"
@@ -50,14 +63,19 @@
             </div>
           </div>
         </div>
-        <div class="flex gap-2 justify-between">
+        <div :class="chat ? 'flex flex-wrap items-end justify-end gap-x-2' : 'flex gap-2 justify-between'">
           <div
             v-if="whatsapp.status != 'failed'"
-            class="absolute -right-0.5 -top-0.5 flex cursor-pointer gap-1 rounded-full bg-surface-base pb-2 pl-2 pr-1.5 pt-1.5 opacity-0 group-hover/message:opacity-100"
-            :style="{
-              background:
-                'radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 35%, rgba(238, 130, 238, 0) 100%)',
-            }"
+            class="absolute -right-0.5 -top-0.5 z-10 flex cursor-pointer gap-1 rounded-full pb-2 pl-2 pr-1.5 pt-1.5 opacity-0 group-hover/message:opacity-100"
+            :class="chat ? 'wa-menu' : 'bg-surface-base'"
+            :style="
+              chat
+                ? {}
+                : {
+                    background:
+                      'radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 35%, rgba(238, 130, 238, 0) 100%)',
+                  }
+            "
           >
             <Dropdown :options="messageOptions(whatsapp)">
               <span
@@ -77,6 +95,7 @@
           <div
             v-if="whatsapp.message_type == 'Template'"
             class="flex flex-col gap-2"
+            :class="chat ? 'min-w-0 grow' : ''"
           >
             <div v-if="whatsapp.header" class="text-base-semibold">
               {{ whatsapp.header }}
@@ -88,20 +107,23 @@
           </div>
           <div
             v-else-if="whatsapp.content_type == 'text'"
+            :class="chat ? 'min-w-0 grow' : ''"
             v-html="formatWhatsAppMessage(whatsapp.message)"
           />
           <div
             v-else-if="whatsapp.content_type == 'button'"
+            :class="chat ? 'min-w-0 grow' : ''"
             v-html="formatWhatsAppMessage(whatsapp.message)"
           />
-          <div v-else-if="whatsapp.content_type == 'image'">
+          <div v-else-if="whatsapp.content_type == 'image'" :class="chat ? 'basis-full' : ''">
             <img
               :src="whatsapp.attach"
-              class="h-40 cursor-pointer rounded-md"
+              class="cursor-pointer rounded-md"
+              :class="chat ? 'max-h-80 max-w-full sm:max-w-xs' : 'h-40'"
               @click="() => openFileInAnotherTab(whatsapp.attach)"
             />
             <div
-              v-if="!whatsapp.message.startsWith('/files/')"
+              v-if="caption(whatsapp)"
               class="mt-1.5"
               v-html="formatWhatsAppMessage(whatsapp.message)"
             />
@@ -109,12 +131,16 @@
           <div
             v-else-if="whatsapp.content_type == 'document'"
             class="flex items-center gap-2"
+            :class="chat ? 'wa-file basis-full cursor-pointer rounded-md p-2' : ''"
+            @click="() => chat && openFileInAnotherTab(whatsapp.attach)"
           >
             <DocumentIcon
-              class="size-10 cursor-pointer rounded-md text-ink-gray-4"
-              @click="() => openFileInAnotherTab(whatsapp.attach)"
+              class="cursor-pointer rounded-md text-ink-gray-4"
+              :class="chat ? 'size-8 shrink-0' : 'size-10'"
+              @click.stop="() => openFileInAnotherTab(whatsapp.attach)"
             />
-            <div class="text-ink-gray-5">Document</div>
+            <div v-if="chat" class="min-w-0 truncate">{{ fileName(whatsapp.attach) }}</div>
+            <div v-else class="text-ink-gray-5">Document</div>
           </div>
           <div
             v-else-if="whatsapp.content_type == 'audio'"
@@ -132,12 +158,22 @@
               class="h-40 cursor-pointer rounded-md"
             />
             <div
-              v-if="!whatsapp.message.startsWith('/files/')"
+              v-if="caption(whatsapp)"
               class="mt-1.5"
               v-html="formatWhatsAppMessage(whatsapp.message)"
             />
           </div>
-          <div class="-mb-1 flex shrink-0 items-end gap-1 text-ink-gray-5">
+          <div
+            class="flex shrink-0 items-end gap-1"
+            :class="chat ? 'wa-meta -mb-0.5 ml-auto' : '-mb-1 text-ink-gray-5'"
+          >
+            <span
+              v-if="chat && whatsapp.status == 'failed'"
+              class="text-2xs font-medium text-ink-red-4"
+              :title="__('WhatsApp did not deliver this message')"
+            >
+              ⚠ {{ __('Not sent') }}
+            </span>
             <Tooltip :text="formatDate(whatsapp.creation, 'ddd, MMM D, YYYY')">
               <div class="text-2xs">
                 {{ formatDate(whatsapp.creation, 'hh:mm a') }}
@@ -151,7 +187,9 @@
               <DoubleCheckIcon
                 v-else-if="['read', 'delivered'].includes(whatsapp.status)"
                 class="size-4"
-                :class="{ 'text-ink-blue-5': whatsapp.status == 'read' }"
+                :class="
+                  whatsapp.status == 'read' ? (chat ? 'wa-read' : 'text-ink-blue-5') : ''
+                "
               />
             </div>
           </div>
@@ -178,6 +216,7 @@
         </IconPicker>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -192,9 +231,45 @@ import { useTelemetry } from 'frappe-ui/frappe'
 import { Tooltip, Dropdown, createResource, toast } from 'frappe-ui'
 import { ref } from 'vue'
 
-defineProps({
+const props = defineProps({
   messages: { type: Array, default: () => [] },
+  // WhatsApp's own look: coloured bubbles with tails, day separators, time and ticks at the bottom right
+  chat: { type: Boolean, default: false },
 })
+
+// is message `index` from the same side as the one before it (a run of bubbles shares one tail)
+function sameSender(index) {
+  const current = props.messages[index]
+  return index > 0 && Boolean(current) && current.type === props.messages[index - 1].type
+}
+
+function day(dt) {
+  return formatDate(dt, 'YYYY-MM-DD')
+}
+
+function newDay(index) {
+  return index === 0 || day(props.messages[index].creation) !== day(props.messages[index - 1].creation)
+}
+
+function dayLabel(dt) {
+  const today = new Date()
+  const yesterday = new Date(today.getTime() - 86400000)
+  const iso = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  if (day(dt) === iso(today)) return __('Today')
+  if (day(dt) === iso(yesterday)) return __('Yesterday')
+  return formatDate(dt, 'D MMMM YYYY')
+}
+
+// a media message with no caption carries its own file path as the text
+function caption(message) {
+  const text = message.message || ''
+  return text && !text.startsWith('/files/') && !text.startsWith('/private/files/')
+}
+
+function fileName(url) {
+  return decodeURIComponent((url || '').split('?')[0].split('/').pop() || '') || __('Document')
+}
 
 const list = defineModel({ type: Object })
 
@@ -287,3 +362,84 @@ function scrollToMessage(name) {
   }, 1000)
 }
 </script>
+
+<style>
+.wa-chat {
+  --wa-in: #ffffff;
+  --wa-out: #d9fdd3;
+  --wa-text: #111b21;
+  --wa-meta: #667781;
+  --wa-chip: #ffffff;
+  --wa-file: rgba(17, 27, 33, 0.06);
+  --wa-read: #53bdeb;
+}
+[data-theme='dark'] .wa-chat {
+  --wa-in: #202c33;
+  --wa-out: #005c4b;
+  --wa-text: #e9edef;
+  --wa-meta: #9fb0b9;
+  --wa-chip: #182229;
+  --wa-file: rgba(255, 255, 255, 0.08);
+}
+.wa-chat .wa-bubble {
+  color: var(--wa-text);
+  overflow-wrap: anywhere;
+}
+.wa-chat .wa-in {
+  background: var(--wa-in);
+}
+.wa-chat .wa-out {
+  background: var(--wa-out);
+}
+/* the little tail on the first bubble of a run */
+.wa-chat .wa-tail.wa-in {
+  border-top-left-radius: 0;
+}
+.wa-chat .wa-tail.wa-out {
+  border-top-right-radius: 0;
+}
+.wa-chat .wa-tail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  border-style: solid;
+  border-width: 0 8px 10px 8px;
+  border-color: transparent;
+}
+.wa-chat .wa-tail.wa-in::before {
+  left: -8px;
+  border-right-color: var(--wa-in);
+  border-width: 0 8px 10px 0;
+}
+.wa-chat .wa-tail.wa-out::before {
+  right: -8px;
+  border-left-color: var(--wa-out);
+  border-width: 0 0 10px 8px;
+}
+.wa-chat .wa-meta {
+  color: var(--wa-meta);
+}
+.wa-chat .wa-read {
+  color: var(--wa-read);
+}
+.wa-chat .wa-chip {
+  background: var(--wa-chip);
+  color: var(--wa-meta);
+}
+.wa-chat .wa-file {
+  background: var(--wa-file);
+}
+.wa-chat .wa-in .wa-menu {
+  background: radial-gradient(circle at 50% 50%, var(--wa-in) 35%, transparent 100%);
+}
+.wa-chat .wa-out .wa-menu {
+  background: radial-gradient(circle at 50% 50%, var(--wa-out) 35%, transparent 100%);
+}
+.wa-chat .wa-bubble a {
+  color: #027eb5;
+  text-decoration: underline;
+}
+[data-theme='dark'] .wa-chat .wa-bubble a {
+  color: #53bdeb;
+}
+</style>
