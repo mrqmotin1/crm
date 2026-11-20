@@ -383,6 +383,11 @@ def get_conversation(conversation: str):
 	# an AI assistant app (hook crm_whatsapp_set_handler) keeps who answers this chat in the ai_* fields
 	if frappe.get_hooks("crm_whatsapp_set_handler") and doc.get("ai_handler"):
 		out.assistant = frappe._dict(handler=doc.ai_handler, reason=doc.get("ai_handover_reason"), stage=doc.get("ai_stage"))
+		# hook crm_whatsapp_assistant_active(conversation) -> False: the assistant takes no part in this chat (e.g. a
+		# number set to no automatic messages), so no "answering" badge and no hand-over buttons
+		for method in frappe.get_hooks("crm_whatsapp_assistant_active"):
+			if frappe.get_attr(method)(doc) is False:
+				out.assistant = None
 	out.reference = None
 	if doc.reference_doctype == "Contact" and doc.reference_name:
 		out.reference = frappe._dict(
@@ -415,14 +420,16 @@ def get_conversation(conversation: str):
 QUICK_EDIT_TYPES = ("Data", "Int", "Select", "Small Text")
 
 
-def quick_fields(doctype: str, name: str) -> list[dict]:
-	"""Fields of the chat's record to show (and edit) beside the chat: hook `crm_whatsapp_quick_fields(doctype)`
-	-> [{"fieldname": ..., "read_only": 0/1}]. Fields the doctype doesn't have are skipped; a field is read-only
-	when the hook, the field itself or the user's permission says so, or its type isn't a simple one."""
+def quick_fields(doctype: str, name: str, ignore_permissions: bool = False) -> list[dict]:
+	"""Fields of the chat's record to show (and edit) beside the chat: hook
+	`crm_whatsapp_quick_fields(doctype, name=...)` -> [{"fieldname": ..., "read_only": 0/1, "question": "..."}].
+	`question` is a ready message that asks the customer for that detail (the inbox's "Ask" button). Fields the
+	doctype doesn't have are skipped; a field is read-only when the hook, the field itself or the user's permission
+	says so, or its type isn't a simple one."""
 	specs = []
 	for method in frappe.get_hooks("crm_whatsapp_quick_fields"):
 		try:
-			specs.extend(frappe.get_attr(method)(doctype) or [])
+			specs.extend(frappe.get_attr(method)(doctype, name=name) or [])
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), f"CRM WhatsApp: hook {method} failed")
 	meta = frappe.get_meta(doctype)
@@ -433,7 +440,7 @@ def quick_fields(doctype: str, name: str) -> list[dict]:
 			fields.append((df, spec))
 	if not fields:
 		return []
-	can_write = frappe.has_permission(doctype, "write", doc=name)
+	can_write = ignore_permissions or frappe.has_permission(doctype, "write", doc=name)
 	values = frappe.db.get_value(doctype, name, [df.fieldname for df, _spec in fields], as_dict=True) or {}
 	return [
 		{
@@ -442,12 +449,79 @@ def quick_fields(doctype: str, name: str) -> list[dict]:
 			"fieldtype": df.fieldtype,
 			"options": [o for o in (df.options or "").split("\n")] if df.fieldtype == "Select" else None,
 			"value": values.get(df.fieldname),
+			"question": spec.get("question") or "",
 			"read_only": int(
 				bool(spec.get("read_only")) or bool(df.read_only) or not can_write or df.fieldtype not in QUICK_EDIT_TYPES
 			),
 		}
 		for df, spec in fields
 	]
+
+
+ASK_TTL = 72 * 3600
+
+
+def _ask_key(conversation: str) -> str:
+	return f"crm_whatsapp_asked::{conversation}"
+
+
+def pending_asks(conversation: str) -> list[str]:
+	"""Quick fields a rep asked the customer about and that aren't filled yet (kept 72 hours)."""
+	return list(frappe.cache.get_value(_ask_key(conversation)) or [])
+
+
+def clear_asks(conversation: str, fieldnames: list[str] | None = None):
+	left = [f for f in pending_asks(conversation) if fieldnames is not None and f not in fieldnames]
+	if left:
+		frappe.cache.set_value(_ask_key(conversation), left, expires_in_sec=ASK_TTL)
+	else:
+		frappe.cache.delete_value(_ask_key(conversation))
+
+
+@frappe.whitelist(methods=["POST"])
+def ask_quick_field(conversation: str, fieldname: str):
+	"""The rep pressed "Ask" on a quick field: returns the question for the message box and remembers that it was
+	asked, so an assistant app can read the customer's answer (it calls pending_asks and fill_quick_fields)."""
+	doc = _get(conversation, "write")
+	field = next(
+		(f for f in quick_fields(doc.reference_doctype, doc.reference_name) if f["fieldname"] == fieldname), None
+	)
+	if not field or field["read_only"] or not field["question"]:
+		frappe.throw(_("There is no question for this field."))
+	asked = [f for f in pending_asks(conversation) if f != fieldname] + [fieldname]
+	frappe.cache.set_value(_ask_key(conversation), asked, expires_in_sec=ASK_TTL)
+	return {"question": field["question"]}
+
+
+def fill_quick_fields(conversation: str, values: dict, by: str | None = None) -> dict:
+	"""For an assistant app: put the customer's answers into the record's quick fields. Only listed, editable fields
+	that are still blank; a value a person typed is never replaced. Leaves a comment naming what was filled."""
+	doc = frappe.get_doc("CRM WhatsApp Conversation", conversation)
+	if doc.reference_doctype not in ("CRM Lead", "CRM Deal") or not doc.reference_name:
+		return {}
+	filled, labels = {}, []
+	for f in quick_fields(doc.reference_doctype, doc.reference_name, ignore_permissions=True):
+		value = values.get(f["fieldname"])
+		if f["read_only"] or f["value"] not in (None, "", 0) or value in (None, ""):
+			continue
+		if f["fieldtype"] == "Int":
+			value = cint(value)
+			if not value:
+				continue
+		else:
+			value = strip_html(str(value)).strip()[:140]
+			if not value or (f["fieldtype"] == "Select" and value not in (f["options"] or [])):
+				continue
+		filled[f["fieldname"]] = value
+		labels.append(f"{f['label']}: {value}")
+	if filled:
+		frappe.db.set_value(doc.reference_doctype, doc.reference_name, filled, update_modified=False)
+		frappe.get_doc(doc.reference_doctype, doc.reference_name).add_comment(
+			"Info", text=frappe.utils.escape_html(f"{by or 'Assistant'} filled from the WhatsApp chat: " + "; ".join(labels))
+		)
+		clear_asks(conversation, list(filled))
+		publish(conversation)
+	return filled
 
 
 @frappe.whitelist(methods=["POST"])
@@ -474,6 +548,7 @@ def set_quick_field(conversation: str, fieldname: str, value: str | int | None =
 	record.check_permission("write")
 	record.set(fieldname, value)
 	record.save()
+	clear_asks(conversation, [fieldname])
 	return {"value": record.get(fieldname)}
 
 
@@ -495,7 +570,42 @@ def get_thread(conversation: str):
 			filters={"content_type": "reaction", "reply_to_message_id": ("in", ids), "name": ("not in", [m.name for m in messages])},
 			fields=MESSAGE_FIELDS,
 		)
-	return enrich_messages(messages, profile_name=doc.profile_name)
+	return _with_ads(enrich_messages(messages, profile_name=doc.profile_name))
+
+
+def _with_ads(messages):
+	"""A chat started from an ad: the first message carries Meta's `referral` (frappe_whatsapp keeps it). The inbox
+	shows the ad and the greeting Meta showed the customer above that message."""
+	names = [m.get("name") for m in messages if m.get("type") == "Incoming"]
+	if not names or not frappe.get_meta("WhatsApp Message").has_field("referral"):
+		return messages
+	referrals = dict(
+		frappe.get_all(
+			"WhatsApp Message",
+			filters={"name": ("in", names), "referral": ("is", "set")},
+			fields=["name", "referral"],
+			as_list=True,
+		)
+	)
+	for m in messages:
+		raw = referrals.get(m.get("name"))
+		if not raw:
+			continue
+		try:
+			ref = frappe.parse_json(raw) if isinstance(raw, str) else raw
+		except ValueError:
+			continue
+		if not isinstance(ref, dict) or not ref:
+			continue
+		welcome = ref.get("welcome_message")
+		m["ad"] = {
+			"kind": "post" if ref.get("source_type") == "post" else "ad",
+			"headline": ref.get("headline") or "",
+			"body": ref.get("body") or "",
+			"url": ref.get("source_url") or "",
+			"greeting": (welcome.get("text") if isinstance(welcome, dict) else "") or "",
+		}
+	return messages
 
 
 @frappe.whitelist()

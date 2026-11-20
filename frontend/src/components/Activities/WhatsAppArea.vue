@@ -7,6 +7,37 @@
         {{ dayLabel(whatsapp.creation) }}
       </span>
     </div>
+    <!-- the chat started from an ad: the ad, and the greeting Meta showed the customer before they wrote -->
+    <template v-if="chat && whatsapp.ad">
+      <div class="mb-2 flex justify-center">
+        <div class="wa-chip max-w-[85%] rounded-lg px-3 py-2 text-xs shadow-sm sm:max-w-[65%]">
+          <div class="font-medium">
+            {{ whatsapp.ad.kind == 'post' ? __('Came from a boosted post') : __('Came from an ad') }}
+          </div>
+          <div v-if="whatsapp.ad.headline" class="wa-ad-text mt-0.5 text-sm">
+            {{ whatsapp.ad.headline }}
+          </div>
+          <div v-if="whatsapp.ad.body" class="mt-0.5 line-clamp-2">{{ whatsapp.ad.body }}</div>
+          <a
+            v-if="whatsapp.ad.url"
+            :href="whatsapp.ad.url"
+            target="_blank"
+            rel="noopener"
+            class="mt-1 inline-block underline"
+          >
+            {{ __('View the ad') }}
+          </a>
+        </div>
+      </div>
+      <div v-if="whatsapp.ad.greeting" class="mb-2.5 flex flex-row-reverse gap-2">
+        <div class="wa-bubble wa-out wa-tail relative max-w-[85%] rounded-lg px-2 pb-1 pt-1.5 text-base shadow-sm sm:max-w-[65%]">
+          <div class="wa-meta mb-0.5 text-2xs font-medium">
+            {{ __('Automatic greeting from the ad') }}
+          </div>
+          <div v-html="formatWhatsAppMessage(whatsapp.ad.greeting)" />
+        </div>
+      </div>
+    </template>
     <div
       class="activity group flex gap-2"
       :class="[
@@ -425,6 +456,9 @@ function scrollToMessage(name) {
 .wa-chat .wa-chip {
   background: var(--wa-chip);
   color: var(--wa-meta);
+}
+.wa-chat .wa-ad-text {
+  color: var(--wa-text);
 }
 .wa-chat .wa-file {
   background: var(--wa-file);

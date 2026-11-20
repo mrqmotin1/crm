@@ -225,8 +225,17 @@
             :class="f.read_only ? 'max-w-56' : 'w-[calc(50%-0.375rem)] sm:w-40'"
           >
             <div class="mb-0.5 flex items-center gap-1 truncate text-xs text-ink-gray-5">
-              {{ f.label }}
-              <span v-if="savedField == f.fieldname" class="text-ink-green-5">✓ {{ __('Saved') }}</span>
+              <span class="truncate">{{ f.label }}</span>
+              <button
+                v-if="!f.read_only && f.question && conversation.data.can_send && conversation.data.window_open"
+                type="button"
+                class="shrink-0 rounded px-1 font-medium text-ink-blue-link hover:bg-surface-gray-3"
+                :title="__('Put the question for the customer in the message box. Mona fills the field from the answer.')"
+                @click="askQuick(f)"
+              >
+                {{ __('Ask') }}
+              </button>
+              <span v-if="savedField == f.fieldname" class="shrink-0 text-ink-green-5">✓ {{ __('Saved') }}</span>
             </div>
             <div
               v-if="f.read_only"
@@ -466,6 +475,23 @@ watch(quickFields, (fields) => {
     if (editingField.value !== f.fieldname) quickValues[f.fieldname] = f.value ?? ''
   }
 })
+
+// "Ask": the ready question goes into the message box for the rep to send (after any text already there). The server
+// remembers it was asked, so the assistant can fill the field from the customer's answer.
+async function askQuick(f) {
+  try {
+    const out = await call('crm.api.whatsapp_inbox.ask_quick_field', {
+      conversation: selected.value,
+      fieldname: f.fieldname,
+    })
+    if (!out?.question) return
+    const typed = content.value.trim()
+    content.value = typed ? typed + '\n' + out.question : out.question
+    rows.value = 4
+  } catch (e) {
+    toast.error(e.messages?.[0] || __('Could not get the question'))
+  }
+}
 
 async function saveQuick(f) {
   editingField.value = null

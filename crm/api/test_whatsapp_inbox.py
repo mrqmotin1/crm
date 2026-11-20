@@ -205,6 +205,13 @@ class TestWhatsAppInbox(TestCase):
 			self.assertEqual((fields["job_title"]["read_only"], fields["status"]["read_only"]), (0, 1))
 			self.assertEqual(inbox.set_quick_field(name, "job_title", " Owner ")["value"], "Owner")
 			self.assertEqual(frappe.db.get_value("CRM Lead", lead, "job_title"), "Owner")
+			# "Ask" hands out the question and remembers it; an assistant fills blank fields only
+			frappe.db.set_value("CRM Lead", lead, "job_title", None)
+			self.assertEqual(inbox.ask_quick_field(name, "job_title")["question"], "Your role?")
+			self.assertEqual(inbox.pending_asks(name), ["job_title"])
+			self.assertEqual(inbox.fill_quick_fields(name, {"job_title": "Manager", "status": "Lost"}, by="Bot"), {"job_title": "Manager"})
+			self.assertEqual(inbox.pending_asks(name), [])
+			self.assertEqual(inbox.fill_quick_fields(name, {"job_title": "Other"}), {})  # already filled
 			for fieldname in ("status", "mobile_no"):  # read-only here, or not listed at all
 				with self.assertRaises(frappe.PermissionError):
 					inbox.set_quick_field(name, fieldname, "x")
@@ -240,5 +247,5 @@ def fake_draft(conversation, language=None, instruction=None):
 	return {"reply": f"draft for {conversation}{extra}"}
 
 
-def fake_quick_fields(doctype):
-	return [{"fieldname": "job_title"}, {"fieldname": "status", "read_only": 1}, {"fieldname": "no_such_field"}]
+def fake_quick_fields(doctype, name=None):
+	return [{"fieldname": "job_title", "question": "Your role?"}, {"fieldname": "status", "read_only": 1}, {"fieldname": "no_such_field"}]
