@@ -197,12 +197,62 @@
               />
             </template>
             <Button
+              v-if="isMobileView && quickFields.length"
+              :variant="showDetails ? 'subtle' : 'ghost'"
+              icon="sliders"
+              :title="__('Lead details')"
+              @click="showDetails = !showDetails"
+            />
+            <Button
               v-if="conversation.data.status == 'Open'"
               :label="__('Done')"
               icon-left="check"
               @click="setStatus('Done')"
             />
             <Button v-else :label="__('Reopen')" @click="setStatus('Open')" />
+          </div>
+        </div>
+        <!-- details of the chat's lead that staff fill in while talking (hook crm_whatsapp_quick_fields) -->
+        <div
+          v-if="quickFields.length"
+          v-show="!isMobileView || showDetails"
+          class="wa-bar flex flex-wrap items-end gap-x-3 gap-y-2 border-b px-3 py-2 sm:px-5"
+        >
+          <div
+            v-for="f in quickFields"
+            :key="f.fieldname"
+            class="min-w-0"
+            :class="f.read_only ? 'max-w-56' : 'w-[calc(50%-0.375rem)] sm:w-40'"
+          >
+            <div class="mb-0.5 flex items-center gap-1 truncate text-xs text-ink-gray-5">
+              {{ f.label }}
+              <span v-if="savedField == f.fieldname" class="text-ink-green-5">✓ {{ __('Saved') }}</span>
+            </div>
+            <div
+              v-if="f.read_only"
+              class="flex h-7 items-center truncate text-sm text-ink-gray-8"
+              :title="f.value || ''"
+            >
+              {{ f.value || '—' }}
+            </div>
+            <select
+              v-else-if="f.fieldtype == 'Select'"
+              v-model="quickValues[f.fieldname]"
+              class="h-7 w-full rounded border border-outline-gray-2 bg-surface-white px-2 py-0 text-sm text-ink-gray-8"
+              @change="saveQuick(f)"
+            >
+              <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+            </select>
+            <TextInput
+              v-else
+              v-model="quickValues[f.fieldname]"
+              variant="outline"
+              size="sm"
+              :type="f.fieldtype == 'Int' ? 'number' : 'text'"
+              @focus="editingField = f.fieldname"
+              @blur="saveQuick(f)"
+              @keydown.enter="(e) => e.target.blur()"
+            />
           </div>
         </div>
         <div ref="threadEl" class="wa-wallpaper flex-1 overflow-y-auto px-4 py-4 sm:px-12">
@@ -350,7 +400,7 @@ import {
   createResource,
   toast,
 } from 'frappe-ui'
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, reactive, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
@@ -403,6 +453,43 @@ const thread = createResource({
 })
 
 watch([scope, search, unreadOnly, status], () => conversations.reload())
+
+// Lead details beside the chat: staff fill them in while talking. Saved when the cursor leaves the box or on Enter.
+const showDetails = ref(false)
+const quickValues = reactive({})
+const editingField = ref(null)
+const savedField = ref(null)
+const quickFields = computed(() => conversation.data?.quick_fields || [])
+watch(quickFields, (fields) => {
+  for (const f of fields) {
+    // a reload (each new message) must not wipe what is being typed
+    if (editingField.value !== f.fieldname) quickValues[f.fieldname] = f.value ?? ''
+  }
+})
+
+async function saveQuick(f) {
+  editingField.value = null
+  const value = quickValues[f.fieldname] ?? ''
+  if (String(value).trim() === String(f.value ?? '').trim()) return
+  const conversationName = selected.value
+  try {
+    const out = await call('crm.api.whatsapp_inbox.set_quick_field', {
+      conversation: conversationName,
+      fieldname: f.fieldname,
+      value,
+    })
+    if (selected.value !== conversationName) return
+    f.value = out.value
+    quickValues[f.fieldname] = out.value ?? ''
+    savedField.value = f.fieldname
+    setTimeout(() => {
+      if (savedField.value === f.fieldname) savedField.value = null
+    }, 2000)
+  } catch (e) {
+    toast.error(e.messages?.[0] || __('Could not save {0}', [f.label]))
+    if (selected.value === conversationName) quickValues[f.fieldname] = f.value ?? ''
+  }
+}
 
 function load() {
   if (!selected.value) return

@@ -408,7 +408,73 @@ def get_conversation(conversation: str):
 				owner_user=r.get(owner_field),
 				mobile_no=r.mobile_no,
 			)
+			out.quick_fields = quick_fields(doc.reference_doctype, doc.reference_name)
 	return out
+
+
+QUICK_EDIT_TYPES = ("Data", "Int", "Select", "Small Text")
+
+
+def quick_fields(doctype: str, name: str) -> list[dict]:
+	"""Fields of the chat's record to show (and edit) beside the chat: hook `crm_whatsapp_quick_fields(doctype)`
+	-> [{"fieldname": ..., "read_only": 0/1}]. Fields the doctype doesn't have are skipped; a field is read-only
+	when the hook, the field itself or the user's permission says so, or its type isn't a simple one."""
+	specs = []
+	for method in frappe.get_hooks("crm_whatsapp_quick_fields"):
+		try:
+			specs.extend(frappe.get_attr(method)(doctype) or [])
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"CRM WhatsApp: hook {method} failed")
+	meta = frappe.get_meta(doctype)
+	fields = []
+	for spec in specs:
+		df = meta.get_field(spec.get("fieldname"))
+		if df and df.fieldname not in [f[0].fieldname for f in fields]:
+			fields.append((df, spec))
+	if not fields:
+		return []
+	can_write = frappe.has_permission(doctype, "write", doc=name)
+	values = frappe.db.get_value(doctype, name, [df.fieldname for df, _spec in fields], as_dict=True) or {}
+	return [
+		{
+			"fieldname": df.fieldname,
+			"label": _(df.label),
+			"fieldtype": df.fieldtype,
+			"options": [o for o in (df.options or "").split("\n")] if df.fieldtype == "Select" else None,
+			"value": values.get(df.fieldname),
+			"read_only": int(
+				bool(spec.get("read_only")) or bool(df.read_only) or not can_write or df.fieldtype not in QUICK_EDIT_TYPES
+			),
+		}
+		for df, spec in fields
+	]
+
+
+@frappe.whitelist(methods=["POST"])
+def set_quick_field(conversation: str, fieldname: str, value: str | int | None = None):
+	"""Save one of the quick fields on the chat's lead or deal. Only fields the hook lists as editable; the record is
+	saved the normal way, so its own validation and permissions apply."""
+	doc = _get(conversation, "write")
+	if doc.reference_doctype not in ("CRM Lead", "CRM Deal") or not doc.reference_name:
+		frappe.throw(_("This conversation isn't linked to a lead or deal."))
+	field = next(
+		(f for f in quick_fields(doc.reference_doctype, doc.reference_name) if f["fieldname"] == fieldname), None
+	)
+	if not field or field["read_only"]:
+		frappe.throw(_("This field can't be changed here."), frappe.PermissionError)
+	if field["fieldtype"] == "Int":
+		value = cint(value)
+	else:
+		value = strip_html(str(value or "")).strip()
+		if field["fieldtype"] == "Data":
+			value = value[:140]
+		if field["fieldtype"] == "Select" and value not in (field["options"] or []):
+			frappe.throw(_("{0} is not one of the choices.").format(value))
+	record = frappe.get_doc(doc.reference_doctype, doc.reference_name)
+	record.check_permission("write")
+	record.set(fieldname, value)
+	record.save()
+	return {"value": record.get(fieldname)}
 
 
 @frappe.whitelist()

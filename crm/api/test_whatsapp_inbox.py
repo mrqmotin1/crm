@@ -187,6 +187,28 @@ class TestWhatsAppInbox(TestCase):
 		with self.assertRaises(frappe.PermissionError):
 			inbox.draft_reply(name)  # same access as replying
 
+	def test_quick_fields(self):
+		sender = number()
+		self.incoming(sender)
+		name = self.conversation(sender)
+		lead = inbox.create_lead(name)
+		orig = frappe.get_hooks
+		with patch.object(
+			frappe,
+			"get_hooks",
+			side_effect=lambda h=None, *a, **k: ["crm.api.test_whatsapp_inbox.fake_quick_fields"]
+			if h == "crm_whatsapp_quick_fields"
+			else orig(h, *a, **k),
+		):
+			fields = {f["fieldname"]: f for f in inbox.get_conversation(name).quick_fields}
+			self.assertEqual(list(fields), ["job_title", "status"])  # an unknown field is skipped
+			self.assertEqual((fields["job_title"]["read_only"], fields["status"]["read_only"]), (0, 1))
+			self.assertEqual(inbox.set_quick_field(name, "job_title", " Owner ")["value"], "Owner")
+			self.assertEqual(frappe.db.get_value("CRM Lead", lead, "job_title"), "Owner")
+			for fieldname in ("status", "mobile_no"):  # read-only here, or not listed at all
+				with self.assertRaises(frappe.PermissionError):
+					inbox.set_quick_field(name, fieldname, "x")
+
 	def test_hooks(self):
 		sender = number()
 		self.incoming_hooks = ["crm.api.test_whatsapp_inbox.broken_hook"]
@@ -216,3 +238,7 @@ def linking_hook(doc):
 def fake_draft(conversation, language=None, instruction=None):
 	extra = (f" in {language}" if language else "") + (f" from {instruction}" if instruction else "")
 	return {"reply": f"draft for {conversation}{extra}"}
+
+
+def fake_quick_fields(doctype):
+	return [{"fieldname": "job_title"}, {"fieldname": "status", "read_only": 1}, {"fieldname": "no_such_field"}]
